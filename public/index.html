@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0d0d10" />
+<title>바 주크박스</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #0d0d10; color: #f5f5f7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", "Pretendard", system-ui, sans-serif;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    max-width: 520px; margin: 0 auto;
+  }
+  h1 { font-size: 1.35rem; margin: 20px 0 4px; letter-spacing: -0.02em; }
+  .sub { color: #8e8e93; font-size: 0.85rem; margin-bottom: 16px; }
+  .now { background: #1a1a20; border: 1px solid #26262e; border-radius: 14px; padding: 12px; display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+  .now img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: #2a2a32; }
+  .now .label { font-size: 0.7rem; color: #ff9f0a; text-transform: uppercase; letter-spacing: 0.06em; }
+  .now .title { font-size: 0.95rem; font-weight: 600; }
+  .now .artist { font-size: 0.8rem; color: #98989d; }
+  .now .empty { color: #6b6b70; font-size: 0.85rem; }
+  .field { display: flex; gap: 8px; margin-bottom: 12px; }
+  input[type=text], input[type=search] {
+    flex: 1; background: #1a1a20; border: 1px solid #2a2a32; color: #f5f5f7;
+    border-radius: 12px; padding: 13px 14px; font-size: 1rem; outline: none;
+  }
+  input:focus { border-color: #ff9f0a; }
+  .btn {
+    background: #ff9f0a; color: #1a1a00; border: none; border-radius: 12px;
+    padding: 13px 18px; font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost { background: #1a1a20; color: #f5f5f7; border: 1px solid #2a2a32; }
+  .btn:disabled { opacity: 0.4; }
+  .results { list-style: none; margin: 8px 0 0; padding: 0; }
+  .results li {
+    display: flex; gap: 12px; align-items: center; padding: 10px 0;
+    border-bottom: 1px solid #1c1c22;
+  }
+  .results li img { width: 44px; height: 44px; border-radius: 6px; background: #2a2a32; }
+  .results .info { flex: 1; min-width: 0; }
+  .results .t { font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .results .a { font-size: 0.78rem; color: #98989d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .results .req { background: #ff9f0a; color: #1a1a00; border: none; border-radius: 10px; padding: 9px 14px; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+  .results .req:disabled { background: #3a3a42; color: #6b6b70; }
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom));
+    background: #2a2a32; border: 1px solid #3a3a42; border-radius: 14px; padding: 14px 16px;
+    font-size: 0.92rem; text-align: center; transition: opacity 0.3s, transform 0.3s;
+  }
+  .toast.ok { border-color: #30d158; }
+  .toast.err { border-color: #ff453a; }
+  .toast.hide { opacity: 0; transform: translateY(10px); pointer-events: none; }
+  .qcount { font-size: 0.8rem; color: #98989d; margin: 16px 0 4px; }
+  .qcount b { color: #f5f5f7; }
+</style>
+</head>
+<body>
+  <h1>🎵 바 주크박스</h1>
+  <div class="sub">곡을 검색하고 신청하면 순서대로 틀어줄게요</div>
+
+  <div class="now" id="now"></div>
+
+  <div class="field">
+    <input id="nickname" type="text" placeholder="닉네임 (한 번만 입력)" maxlength="20" />
+  </div>
+  <div class="field">
+    <input id="q" type="search" placeholder="노래 / 가수 검색" enterkeyhint="search" />
+    <button class="btn" id="searchBtn">검색</button>
+  </div>
+
+  <ul class="results" id="results"></ul>
+  <div class="qcount" id="qcount"></div>
+
+  <div class="toast hide" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lastState = null;
+
+function toast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (kind || '') + ' hide';
+  requestAnimationFrame(() => t.classList.remove('hide'));
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.add('hide'), 3200);
+}
+
+function getNick() {
+  let n = localStorage.getItem('bj_nick') || '';
+  $('nickname').value = n;
+  return n;
+}
+$('nickname').addEventListener('change', () => {
+  localStorage.setItem('bj_nick', $('nickname').value.trim());
+});
+
+function renderNow(s) {
+  const el = $('now');
+  if (s.nowPlaying) {
+    const x = s.nowPlaying.song;
+    el.innerHTML = `<img src="${x.artworkUrl}" alt=""/><div><div class="label">지금 재생중</div><div class="title">${esc(x.trackName)}</div><div class="artist">${esc(x.artistName)} · 신청 ${esc(x.requestedBy)}</div></div>`;
+  } else {
+    el.innerHTML = `<div class="empty">지금 틀리는 곡이 없어요 — 첫 곡을 신청해보세요</div>`;
+  }
+  const n = s.queue.length;
+  $('qcount').innerHTML = n ? `대기열에 <b>${n}곡</b>이 있어요` : '';
+}
+
+async function refresh() {
+  try {
+    const s = await (await fetch('/api/state')).json();
+    lastState = s;
+    renderNow(s);
+    updateRequestButtons();
+  } catch {}
+}
+function updateRequestButtons() {
+  if (!lastState) return;
+  const nick = $('nickname').value.trim().toLowerCase();
+  const hasActive = lastState.nowPlaying?.song.requestedBy?.toLowerCase() === nick
+    || lastState.queue.some(s => s.requestedBy?.toLowerCase() === nick);
+  document.querySelectorAll('.results .req').forEach(b => { b.disabled = !nick || hasActive; });
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function renderResults(hits) {
+  const ul = $('results');
+  ul.innerHTML = hits.map(h => `
+    <li>
+      <img src="${h.artworkUrl}" alt=""/>
+      <div class="info"><div class="t">${esc(h.trackName)}</div><div class="a">${esc(h.artistName)}</div></div>
+      <button class="req" data-hit='${JSON.stringify(h).replace(/'/g, "&#39;")}'>신청</button>
+    </li>`).join('');
+  updateRequestButtons();
+}
+
+$('searchBtn').onclick = doSearch;
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+async function doSearch() {
+  const q = $('q').value.trim();
+  if (!q) return;
+  $('searchBtn').disabled = true;
+  try {
+    const r = await (await fetch('/api/search?q=' + encodeURIComponent(q))).json();
+    if (r.error) { toast(r.error, 'err'); return; }
+    if (!r.hits.length) { toast('검색 결과가 없어요', 'err'); }
+    renderResults(r.hits);
+  } catch { toast('검색 중 오류', 'err'); }
+  finally { $('searchBtn').disabled = false; }
+}
+
+$('results').addEventListener('click', async (e) => {
+  const b = e.target.closest('.req');
+  if (!b || b.disabled) return;
+  const nick = $('nickname').value.trim();
+  if (!nick) { toast('닉네임을 먼저 입력해주세요', 'err'); $('nickname').focus(); return; }
+  const hit = JSON.parse(b.getAttribute('data-hit'));
+  b.disabled = true;
+  try {
+    const r = await fetch('/api/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...hit, nickname: nick })
+    });
+    const j = await r.json();
+    if (!r.ok) { toast(j.error || '신청 실패', 'err'); b.disabled = false; return; }
+    toast('신청됐어요! 순서가 오면 틀어줄게요 🎧', 'ok');
+    refresh();
+  } catch { toast('네트워크 오류', 'err'); b.disabled = false; }
+});
+
+getNick();
+refresh();
+setInterval(refresh, 2500);
+</script>
+</body>
+</html>

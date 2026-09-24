@@ -1,0 +1,19 @@
+{
+  "name": "bar-jukebox",
+  "private": true,
+  "scripts": {
+    "dev": "bun src/server.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "check": "bunx biome check src test-flow.ts"
+  },
+  "dependencies": {
+    "hono": "^4.13.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@types/bun": "^1.3.14",
+    "typescript": "^7.0.2"
+  }
+}
