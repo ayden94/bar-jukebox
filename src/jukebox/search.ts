@@ -1,16 +1,3 @@
-import { z } from "zod";
-
-const SearchResult = z.object({
-  trackId: z.number(),
-  trackName: z.string(),
-  artistName: z.string(),
-  artworkUrl100: z.string(),
-  trackViewUrl: z.string(),
-  trackNumber: z.number(),
-  collectionId: z.number(),
-  trackTimeMillis: z.number().optional(),
-});
-
 export type SearchHit = {
   trackId: number;
   trackName: string;
@@ -21,6 +8,16 @@ export type SearchHit = {
   durationSec: number | null;
 };
 
+type RawSearchResult = {
+  trackId?: unknown;
+  trackName?: unknown;
+  artistName?: unknown;
+  artworkUrl100?: unknown;
+  trackViewUrl?: unknown;
+  trackNumber?: unknown;
+  trackTimeMillis?: unknown;
+};
+
 export async function searchMusic(
   term: string,
   limit = 12,
@@ -28,23 +25,30 @@ export async function searchMusic(
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=${limit}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`iTunes search failed: ${res.status}`);
-  const data = (await res.json()) as { results?: unknown[] };
+  const data = (await res.json()) as { results?: RawSearchResult[] };
 
   const hits: SearchHit[] = [];
   for (const raw of data.results ?? []) {
-    const parsed = SearchResult.safeParse(raw);
-    if (!parsed.success) continue;
-    const r = parsed.data;
+    if (
+      typeof raw.trackId !== "number" ||
+      typeof raw.trackName !== "string" ||
+      typeof raw.artistName !== "string" ||
+      typeof raw.artworkUrl100 !== "string" ||
+      typeof raw.trackViewUrl !== "string" ||
+      typeof raw.trackNumber !== "number"
+    ) {
+      continue;
+    }
     hits.push({
-      trackId: r.trackId,
-      trackName: r.trackName,
-      artistName: r.artistName,
-      artworkUrl: r.artworkUrl100.replace("100x100bb", "300x300bb"),
-      albumUrl: toAlbumUrl(r.trackViewUrl),
-      trackNumber: r.trackNumber,
+      trackId: raw.trackId,
+      trackName: raw.trackName,
+      artistName: raw.artistName,
+      artworkUrl: raw.artworkUrl100.replace("100x100bb", "300x300bb"),
+      albumUrl: toAlbumUrl(raw.trackViewUrl),
+      trackNumber: raw.trackNumber,
       durationSec:
-        r.trackTimeMillis !== undefined
-          ? Math.round(r.trackTimeMillis / 1000)
+        typeof raw.trackTimeMillis === "number"
+          ? Math.round(raw.trackTimeMillis / 1000)
           : null,
     });
   }
