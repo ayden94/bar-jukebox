@@ -85,6 +85,9 @@ export function AdminDocument({ stylesheets }: AdminDocumentProps) {
   );
 }
 
+const art = (u: string): string =>
+  u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;
+
 function AdminApp() {
   const [token, setToken] = useState("");
   const [authed, setAuthed] = useState(false);
@@ -224,7 +227,7 @@ function AdminApp() {
         className: draggable ? (dragOverId === s.id ? "dragover" : "") : "",
       },
       draggable ? createElement("span", { className: "grip" }, "⠿") : null,
-      createElement("img", { src: s.artworkUrl, alt: "" }),
+      createElement("img", { src: art(s.artworkUrl), alt: "" }),
       createElement(
         "div",
         { className: "info" },
@@ -384,7 +387,10 @@ function AdminApp() {
             { className: "now" },
             npSong
               ? [
-                  createElement("img", { src: npSong.artworkUrl, key: "art" }),
+                  createElement("img", {
+                    src: art(npSong.artworkUrl),
+                    key: "art",
+                  }),
                   createElement(
                     "div",
                     { key: "info" },
@@ -490,7 +496,7 @@ function AdminApp() {
               createElement(
                 "li",
                 { key: h.trackId },
-                createElement("img", { src: h.artworkUrl, alt: "" }),
+                createElement("img", { src: art(h.artworkUrl), alt: "" }),
                 createElement(
                   "div",
                   { className: "info" },

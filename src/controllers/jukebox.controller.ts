@@ -6,10 +6,12 @@ import {
   ForbiddenException,
   Get,
   InternalServerErrorException,
+  NotFoundException,
   Post,
   type RequestContext,
   RequestDto,
 } from "@fluojs/http";
+import { fetchArtwork } from "../jukebox/artwork";
 import type { JukeboxDatabase, MusicSearch } from "../jukebox/providers";
 import {
   JukeboxDatabaseToken,
@@ -20,6 +22,7 @@ import type { JukeboxStateStore } from "../jukebox/state";
 import type { Song } from "../jukebox/types";
 import { deviceIdOf } from "../middleware/device-cookie.middleware";
 import {
+  ArtworkQueryDto,
   CancelDto,
   RequestSongDto,
   SearchQueryDto,
@@ -57,6 +60,17 @@ export class JukeboxController {
     private readonly state: JukeboxStateStore,
     private readonly db: JukeboxDatabase,
   ) {}
+
+  @Get("/api/artwork")
+  @RequestDto(ArtworkQueryDto)
+  async artwork(dto: ArtworkQueryDto, context: RequestContext) {
+    if (!dto.u) throw new BadRequestException("u가 필요해요");
+    const artwork = await fetchArtwork(dto.u);
+    if (!artwork) throw new NotFoundException("커버를 가져올 수 없어요");
+    context.response.setHeader("Content-Type", artwork.contentType);
+    context.response.setHeader("Cache-Control", "public, max-age=86400");
+    return artwork.body;
+  }
 
   @Get("/api/state")
   snapshot() {

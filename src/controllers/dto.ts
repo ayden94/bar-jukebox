@@ -75,3 +75,7 @@ export class SettingsDto {
     | null = null;
   @Optional() @IsString() @FromBody("notice") notice: string | null = null;
 }
+
+export class ArtworkQueryDto {
+  @IsString() @FromQuery("u") u = "";
+}

@@ -42,6 +42,9 @@ type SearchHit = {
   durationSec: number | null;
 };
 
+const art = (u: string): string =>
+  u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;
+
 function fmt(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return "-:--";
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -337,7 +340,7 @@ function GuestApp({
         createElement(
           "li",
           { key: h.trackId },
-          createElement("img", { src: h.artworkUrl, alt: "" }),
+          createElement("img", { src: art(h.artworkUrl), alt: "" }),
           createElement(
             "div",
             { className: "info" },
@@ -370,7 +373,7 @@ function GuestApp({
             onClick: () => setSheetOpen(true),
             "aria-label": "재생 화면 열기",
           },
-          createElement("img", { src: npSong.artworkUrl, alt: "" }),
+          createElement("img", { src: art(npSong.artworkUrl), alt: "" }),
           createElement(
             "div",
             { className: "mi" },
@@ -412,7 +415,7 @@ function GuestApp({
               { className: "nphead" },
               createElement("img", {
                 className: "bigart",
-                src: npSong.artworkUrl,
+                src: art(npSong.artworkUrl),
                 alt: "",
               }),
               createElement("div", { className: "nplabel" }, "NOW PLAYING"),
@@ -482,7 +485,7 @@ function GuestApp({
                   "li",
                   { key: s.id, className: my ? "mine" : "" },
                   createElement("span", { className: "idx" }, String(i + 1)),
-                  createElement("img", { src: s.artworkUrl, alt: "" }),
+                  createElement("img", { src: art(s.artworkUrl), alt: "" }),
                   createElement(
                     "div",
                     { className: "info" },
