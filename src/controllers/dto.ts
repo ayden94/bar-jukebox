@@ -13,6 +13,11 @@ import {
   IsString,
 } from "@fluojs/validation";
 
+export class GuestQueryDto {
+  @Optional() @IsString() @FromQuery("t") t = "";
+  @Optional() @IsString() @FromQuery("k") k = "";
+}
+
 export class TableQueryDto {
   @IsString() @FromQuery("t") t = "";
   @IsString() @FromQuery("k") k = "";

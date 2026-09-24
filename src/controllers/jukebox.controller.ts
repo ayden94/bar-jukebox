@@ -58,14 +58,6 @@ export class JukeboxController {
     private readonly db: JukeboxDatabase,
   ) {}
 
-  // 임시: P3에서 React 페이지로 대체될 기존 HTML 서빙
-  @Get("/")
-  index() {
-    return new Response(Bun.file("./public/index.html"), {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-  }
-
   @Get("/api/state")
   snapshot() {
     return this.state.snapshot();
@@ -143,12 +135,5 @@ export class JukeboxController {
       deviceIdOf(context),
     );
     return { ok: removed };
-  }
-
-  @Get("/admin")
-  adminPage() {
-    return new Response(Bun.file("./public/admin.html"), {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
   }
 }

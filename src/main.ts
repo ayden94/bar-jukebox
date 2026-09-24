@@ -1,7 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
 import { FluoFactory } from "@fluojs/runtime";
 
-import { AppModule } from "./app.module";
+import { createJukeboxModule } from "./app";
 import { onChange } from "./jukebox/bus";
 import * as db from "./jukebox/db";
 import { startPlaybackLoop } from "./jukebox/playback";
@@ -13,6 +14,17 @@ state.hydrate(db.loadState());
 // 상태 변경(mutate)을 SQLite에 저장. SSE 브로드캐스트는 events.controller가 수행.
 onChange((event) => {
   if (event === "mutate") db.saveSnapshot(state.snapshot());
+});
+
+const manifest: unknown = JSON.parse(
+  await readFile(
+    new URL("../client/.vite/manifest.json", import.meta.url),
+    "utf8",
+  ),
+);
+const AppModule = createJukeboxModule({
+  clientDirectory: new URL("../client/", import.meta.url),
+  manifest,
 });
 
 const PORT = Number(process.env.PORT ?? 5173);
