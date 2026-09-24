@@ -11,34 +11,37 @@
   html, body { margin: 0; }
   body {
     background: #0d0d10; color: #f5f5f7;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", "Pretendard", system-ui, sans-serif;
     padding: 20px; min-height: 100vh;
   }
-  .wrap { max-width: 880px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 22px; }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 22px; }
   @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
   h1 { font-size: 1.25rem; margin: 0 0 14px; letter-spacing: -0.02em; }
   h2 { font-size: 0.85rem; color: #98989d; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px; }
-  .panel { background: #16161c; border: 1px solid #26262e; border-radius: 14px; padding: 16px; }
+  .panel { background: #16161c; border: 1px solid #26262e; border-radius: 14px; padding: 16px; margin-bottom: 4px; }
   .now { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
   .now img { width: 56px; height: 56px; border-radius: 8px; background: #2a2a32; }
   .now .label { font-size: 0.7rem; color: #ff9f0a; text-transform: uppercase; letter-spacing: 0.06em; }
   .now .title { font-size: 1rem; font-weight: 600; }
   .now .artist { font-size: 0.82rem; color: #98989d; }
+  .progress { height: 4px; background: #26262e; border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .progress .bar { height: 100%; width: 0%; background: #ff9f0a; border-radius: 2px; }
   .empty { color: #6b6b70; font-size: 0.9rem; }
   .btn { background: #ff9f0a; color: #1a1a00; border: none; border-radius: 10px; padding: 9px 14px; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
   .btn.ghost { background: #1a1a20; color: #f5f5f7; border: 1px solid #2a2a32; }
   .btn.danger { background: #ff453a; color: #fff; }
+  .btn.okstate { background: #30d158; color: #fff; }
   .btn:disabled { opacity: 0.4; }
   .skiprow { display: flex; gap: 8px; margin-top: 4px; }
-  .queue { list-style: none; margin: 0; padding: 0; }
+  .queue, .tablelist { list-style: none; margin: 0; padding: 0; }
   .queue li { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; border: 1px solid transparent; }
   .queue li.dragging { opacity: 0.4; }
   .queue li.dragover { border-color: #ff9f0a; }
-  .queue img { width: 40px; height: 40px; border-radius: 6px; background: #2a2a32; }
+  .queue img, .tablelist img { width: 40px; height: 40px; border-radius: 6px; background: #2a2a32; }
   .queue .info { flex: 1; min-width: 0; }
   .queue .t { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .queue .a { font-size: 0.76rem; color: #98989d; }
-  .queue .by { font-size: 0.72rem; color: #6b6b70; }
+  .queue .by { font-size: 0.72rem; color: #6b6b70; flex-shrink: 0; }
   .queue .grip { cursor: grab; color: #6b6b70; user-select: none; padding: 0 4px; }
   .queue .del { background: none; border: none; color: #ff453a; cursor: pointer; font-size: 1.1rem; padding: 4px; }
   .field { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -53,6 +56,27 @@
   .gate { max-width: 360px; margin: 80px auto; text-align: center; }
   .gate input { width: 100%; margin-bottom: 12px; }
   .note { font-size: 0.78rem; color: #6b6b70; margin-top: 10px; line-height: 1.5; }
+  .tablelist li { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #1c1c22; flex-wrap: wrap; }
+  .tablelist .tlabel { flex: 1; font-size: 0.92rem; font-weight: 600; }
+  .tablelist .tlabel small { color: #6b6b70; font-weight: 400; margin-left: 6px; }
+  .qrbox { display: none; width: 100%; background: #fff; border-radius: 12px; padding: 12px; text-align: center; }
+  .qrbox.show { display: block; }
+  .qrbox svg { width: 170px; height: 170px; }
+  .qrbox .qurl { color: #333; font-size: 0.72rem; word-break: break-all; margin-top: 6px; }
+  .settingrow { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .settingrow label { font-size: 0.85rem; color: #98989d; flex-shrink: 0; }
+  #printArea { display: none; }
+  @media print {
+    body > *:not(#printArea) { display: none !important; }
+    #printArea { display: block; background: #fff; }
+    body { background: #fff; padding: 0; }
+    .qcards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; padding: 14px; }
+    .qcard { border: 1.5px solid #222; border-radius: 12px; padding: 18px; text-align: center; page-break-inside: avoid; color: #000; }
+    .qcard h3 { margin: 0 0 10px; font-size: 1.15rem; }
+    .qcard svg { width: 170px; height: 170px; }
+    .qcard .qurl { font-size: 0.68rem; color: #444; word-break: break-all; }
+    .qcard .qhint { font-size: 0.8rem; margin-top: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -60,14 +84,16 @@
   <h1>🔒 주크박스 관리</h1>
   <input id="tokenInput" type="password" placeholder="관리자 비밀번호" />
   <button class="btn" id="tokenBtn">들어가기</button>
-  <div class="note">기본 비밀번호는 <code>bar</code> (환경변수 ADMIN_TOKEN 으로 변경). 비밀번호는 이 브라우저에만 저장됩니다.</div>
+  <div class="note">비밀번호는 서버 <code>.env</code>의 <code>ADMIN_TOKEN</code>입니다. 이 브라우저에만 저장돼요.</div>
 </div>
 
 <div id="app" class="wrap" style="display:none">
   <div>
+    <h1>주크박스 관리</h1>
     <h2>지금 재생중</h2>
     <div class="panel">
       <div class="now" id="now"></div>
+      <div class="progress"><div class="bar" id="npBar"></div></div>
       <div class="skiprow">
         <button class="btn danger" id="skipBtn">⏭ 스킵 (다음 곡으로)</button>
       </div>
@@ -78,6 +104,12 @@
       <ul class="queue" id="queue"></ul>
       <div class="empty" id="qempty">대기열이 비었어요</div>
     </div>
+
+    <h2 style="margin-top:18px">최근 재생</h2>
+    <div class="panel">
+      <ul class="queue" id="history"></ul>
+      <div class="empty" id="hempty">기록이 없어요</div>
+    </div>
   </div>
 
   <div>
@@ -87,32 +119,57 @@
       <ul class="searchres" id="searchres"></ul>
     </div>
 
-    <h2 style="margin-top:18px">최근 재생</h2>
+    <h2 style="margin-top:18px">테이블 &amp; QR</h2>
     <div class="panel">
-      <ul class="queue" id="history"></ul>
-      <div class="empty" id="hempty">기록이 없어요</div>
+      <div class="field">
+        <input id="tableLabel" type="text" placeholder="테이블 이름 (예: 테이블 1)" maxlength="30" />
+        <button class="btn" id="tableAddBtn">추가</button>
+      </div>
+      <ul class="tablelist" id="tablelist"></ul>
+      <div class="empty" id="tempty">테이블이 없어요 — 추가하고 QR을 인쇄하세요</div>
+      <div style="margin-top:12px"><button class="btn ghost" id="printBtn">🖨 테이블 QR 전체 인쇄</button></div>
+    </div>
+
+    <h2 style="margin-top:18px">운영 설정</h2>
+    <div class="panel">
+      <div class="settingrow">
+        <label>곡 신청</label>
+        <button class="btn okstate" id="pauseBtn">받는 중</button>
+      </div>
+      <div class="settingrow">
+        <label>공지</label>
+        <input id="noticeInput" type="text" placeholder="손님 화면에 표시할 공지 (비우면 숨김)" maxlength="200" />
+        <button class="btn" id="noticeBtn">저장</button>
+      </div>
+      <div class="note">신청을 일시중지하면 손님 화면에 안내가 표시되고 신청이 차단돼요. 바텐더의 곡 추가는 언제나 가능해요.</div>
     </div>
   </div>
 </div>
+
+<div id="printArea"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem('bj_admin') || '';
 let state = null;
+let requestsPaused = false;
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
 
-function authHeaders() { return { 'Content-Type': 'application/json', 'x-admin-token': token }; }
 async function api(path, opts = {}) {
-  const r = await fetch(path, { ...opts, headers: { ...(opts.headers||{}), 'x-admin-token': token } });
-  return r;
+  return fetch(path, { ...opts, headers: { ...(opts.headers||{}), 'x-admin-token': token } });
 }
 
-function showApp() { $('gate').style.display = 'none'; $('app').style.display = 'grid'; refresh(); }
-if (token) showApp();
+function showApp() { $('gate').style.display = 'none'; $('app').style.display = 'grid'; refresh(); loadTables(); loadSettings(); }
+if (token) checkToken();
+async function checkToken() {
+  const r = await api('/api/admin/tables');
+  if (r.status === 401) { localStorage.removeItem('bj_admin'); token = ''; return; }
+  showApp();
+}
 $('tokenBtn').onclick = async () => {
   token = $('tokenInput').value;
-  const r = await api('/api/admin/skip', { method: 'POST' });
+  const r = await api('/api/admin/tables');
   if (r.status === 401) { alert('비밀번호가 틀렸어요'); return; }
   localStorage.setItem('bj_admin', token);
   showApp();
@@ -127,6 +184,11 @@ function songRow(s, draggable) {
     <button class="del" data-id="${s.id}" title="삭제">✕</button></li>`;
 }
 
+function fmt(sec) {
+  if (sec == null || !Number.isFinite(sec)) return '-:--';
+  return Math.floor(sec/60) + ':' + String(Math.floor(sec%60)).padStart(2, '0');
+}
+
 function render(s) {
   state = s;
   const np = s.nowPlaying?.song;
@@ -134,15 +196,32 @@ function render(s) {
     ? `<img src="${np.artworkUrl}"/><div><div class="label">재생중</div><div class="title">${esc(np.trackName)}</div><div class="artist">${esc(np.artistName)} · ${esc(np.requestedBy)}</div></div>`
     : '<div class="empty">재생중인 곡이 없어요</div>';
   $('skipBtn').disabled = !np;
+  if (np && s.nowPlaying) {
+    const dur = s.nowPlaying.durationSec ?? np.durationSec;
+    $('npBar').style.width = dur ? Math.min(100, (s.nowPlaying.positionSec / dur) * 100) + '%' : '0%';
+  } else {
+    $('npBar').style.width = '0%';
+  }
 
-  const q = $('queue');
-  q.innerHTML = s.queue.map(x => songRow(x, true)).join('');
+  $('queue').innerHTML = s.queue.map(x => songRow(x, true)).join('');
   $('qempty').style.display = s.queue.length ? 'none' : 'block';
   $('qcount').textContent = s.queue.length ? `(${s.queue.length})` : '';
 
-  const h = $('history');
-  h.innerHTML = s.history.map(x => songRow(x, false)).join('');
+  $('history').innerHTML = s.history.map(x => songRow(x, false)).join('');
   $('hempty').style.display = s.history.length ? 'none' : 'block';
+
+  if (s.requestsPaused !== requestsPaused) {
+    requestsPaused = s.requestsPaused;
+    renderPauseBtn();
+  }
+  const noticeInput = $('noticeInput');
+  if (document.activeElement !== noticeInput) noticeInput.value = s.notice || '';
+}
+
+function renderPauseBtn() {
+  const b = $('pauseBtn');
+  b.textContent = requestsPaused ? '일시중지 중' : '받는 중';
+  b.className = requestsPaused ? 'btn danger' : 'btn okstate';
 }
 
 async function refresh() {
@@ -161,7 +240,7 @@ document.body.addEventListener('click', async (e) => {
 
 // drag-to-reorder on queue
 let dragId = null;
-$('queue').addEventListener('dragstart', (e) => { dragId = e.target.closest('li')?.dataset.id; e.currentTarget.classList; });
+$('queue').addEventListener('dragstart', (e) => { dragId = e.target.closest('li')?.dataset.id; });
 $('queue').addEventListener('dragover', (e) => {
   e.preventDefault();
   const li = e.target.closest('li'); if (!li) return;
@@ -196,7 +275,74 @@ $('searchres').addEventListener('click', async (e) => {
   refresh();
 });
 
-setInterval(refresh, 2000);
+// ── 테이블 & QR ──
+let tables = [];
+async function loadTables() {
+  const j = await (await api('/api/admin/tables')).json();
+  tables = j.tables || [];
+  $('tablelist').innerHTML = tables.map(t => `
+    <li data-id="${t.id}">
+      <div class="tlabel">${esc(t.label)}<small>#${t.id}</small></div>
+      <button class="btn ghost qrbtn" data-id="${t.id}">QR 보기</button>
+      <button class="btn danger tdel" data-id="${t.id}">삭제</button>
+    </li>
+    <li class="qrrow" data-for="${t.id}" style="padding:0;border:none">
+      <div class="qrbox" data-id="${t.id}"></div>
+    </li>`).join('');
+  $('tempty').style.display = tables.length ? 'none' : 'block';
+}
+$('tableAddBtn').onclick = async () => {
+  const label = $('tableLabel').value.trim();
+  if (!label) { alert('테이블 이름을 입력해주세요'); return; }
+  const r = await api('/api/admin/tables', { method: 'POST', body: JSON.stringify({ label }) });
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || '생성 실패'); return; }
+  $('tableLabel').value = '';
+  loadTables();
+};
+$('tablelist').addEventListener('click', async (e) => {
+  const qrbtn = e.target.closest('.qrbtn');
+  if (qrbtn) {
+    const box = document.querySelector(`.qrbox[data-id="${qrbtn.dataset.id}"]`);
+    if (box.classList.contains('show')) { box.classList.remove('show'); return; }
+    const j = await (await api(`/api/admin/tables/${qrbtn.dataset.id}/qr`)).json();
+    box.innerHTML = j.svg + `<div class="qurl">${esc(j.url)}</div>`;
+    box.classList.add('show');
+    return;
+  }
+  const tdel = e.target.closest('.tdel');
+  if (tdel) {
+    if (!confirm('테이블을 삭제할까요? (인쇄된 QR도 무효가 돼요)')) return;
+    await api(`/api/admin/tables/${tdel.dataset.id}`, { method: 'DELETE' });
+    loadTables();
+  }
+});
+
+// ── 인쇄 ──
+$('printBtn').onclick = async () => {
+  if (!tables.length) { alert('먼저 테이블을 추가해주세요'); return; }
+  const cards = [];
+  for (const t of tables) {
+    const j = await (await api(`/api/admin/tables/${t.id}/qr`)).json();
+    cards.push(`<div class="qcard"><h3>${esc(t.label)}</h3>${j.svg}
+      <div class="qhint">📱 QR을 스캔해서 노래를 신청하세요</div>
+      <div class="qurl">${esc(j.url)}</div></div>`);
+  }
+  $('printArea').innerHTML = '<div class="qcards">' + cards.join('') + '</div>';
+  window.print();
+};
+
+// ── 운영 설정 ──
+$('pauseBtn').onclick = async () => {
+  await api('/api/admin/settings', { method: 'POST', body: JSON.stringify({ requestsPaused: !requestsPaused }) });
+  refresh();
+};
+$('noticeBtn').onclick = async () => {
+  await api('/api/admin/settings', { method: 'POST', body: JSON.stringify({ notice: $('noticeInput').value.trim() }) });
+  refresh();
+};
+
+setInterval(refresh, 2500);
 </script>
 </body>
 </html>

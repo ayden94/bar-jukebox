@@ -8,6 +8,7 @@ const SearchResult = z.object({
   trackViewUrl: z.string(),
   trackNumber: z.number(),
   collectionId: z.number(),
+  trackTimeMillis: z.number().optional(),
 });
 
 export type SearchHit = {
@@ -17,6 +18,7 @@ export type SearchHit = {
   artworkUrl: string;
   albumUrl: string;
   trackNumber: number;
+  durationSec: number | null;
 };
 
 export async function searchMusic(
@@ -40,6 +42,10 @@ export async function searchMusic(
       artworkUrl: r.artworkUrl100.replace("100x100bb", "300x300bb"),
       albumUrl: toAlbumUrl(r.trackViewUrl),
       trackNumber: r.trackNumber,
+      durationSec:
+        r.trackTimeMillis !== undefined
+          ? Math.round(r.trackTimeMillis / 1000)
+          : null,
     });
   }
   return hits;

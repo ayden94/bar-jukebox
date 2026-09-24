@@ -11,72 +11,135 @@ type ApiBody = {
 };
 
 type SearchHit = {
+  trackId: number;
   trackName: string;
   artistName: string;
   albumUrl: string;
   trackNumber: number;
+  durationSec?: number | null;
+  artworkUrl?: string;
   [key: string]: unknown;
 };
 
 type QueueState = {
-  queue: Array<{ id: string }>;
+  queue: Array<{ id: string; deviceId: string | null; requestedBy: string }>;
 };
+
+type TableInfo = { id: number; label: string; url?: string };
 
 const j = async (r: Response): Promise<{ status: number; body: ApiBody }> => ({
   status: r.status,
   body: (await r.json().catch(() => null)) as ApiBody,
 });
 
+// 기기 쿠키를 흉내: /api/table 응답의 Set-Cookie를 이후 요청에 재사용
+let cookie = "";
+
+async function guestFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...init.headers,
+    },
+  });
+}
+
+// 1. 테이블 생성 (어드민)
+const created = await j(
+  await fetch(`${BASE}/api/admin/tables`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-token": TOKEN },
+    body: JSON.stringify({ label: `플로우테스트-${Date.now() % 10000}` }),
+  }),
+);
+const table = (created.body as { table?: TableInfo }).table;
+if (!created.body.ok || !table) throw new Error("table create failed");
+const k = table.url ? (new URL(table.url).searchParams.get("k") ?? "") : "";
+console.log("1. table create:", created.status, `#${table.id}`);
+
+// 2. 손님 부트스트랩 (쿠키 발급)
+const tableRes = await guestFetch(
+  `/api/table?t=${table.id}&k=${encodeURIComponent(k)}`,
+);
+const setCookies = tableRes.headers.getSetCookie?.() ?? [];
+for (const c of setCookies) {
+  if (c.startsWith("bj_did=")) cookie = c.split(";")[0] ?? "";
+}
+const tableInfo = (await tableRes.json()) as TableInfo & { deviceId: string };
+console.log(
+  "2. guest bootstrap:",
+  tableRes.status,
+  tableInfo.label,
+  "device issued:",
+  cookie.length > 0,
+);
+
+// 3. 검색
 const s = (await (
-  await fetch(`${BASE}/api/search?q=daft+punk+get+lucky`)
+  await guestFetch("/api/search?q=daft+punk+get+lucky")
 ).json()) as { hits: SearchHit[] };
 const hit = s.hits[0];
 if (!hit) throw new Error("Search returned no Get Lucky result");
-console.log("1. search hit:", hit.trackName, "—", hit.artistName);
-console.log(
-  "   albumUrl uses music scheme:",
-  hit.albumUrl.startsWith("music://"),
-);
+console.log("3. search hit:", hit.trackName, "—", hit.artistName);
 
+// 4. 신청 #1 (성공)
 let r = await j(
-  await fetch(`${BASE}/api/request`, {
+  await guestFetch("/api/request", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...hit, nickname: "민준" }),
+    body: JSON.stringify({
+      ...hit,
+      tableId: table.id,
+      tableSecret: k,
+    }),
   }),
 );
-console.log("2. request #1:", r.status, r.body.ok ? "ok" : r.body.error);
+console.log("4. request #1:", r.status, r.body.ok ? "ok" : r.body.error);
 
+// 5. 신청 #2 (같은 기기 → 409)
 r = await j(
-  await fetch(`${BASE}/api/request`, {
+  await guestFetch("/api/request", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...hit, nickname: "민준" }),
+    body: JSON.stringify({
+      ...hit,
+      tableId: table.id,
+      tableSecret: k,
+    }),
   }),
 );
 console.log(
-  "3. request #2 (cooldown):",
+  "5. request #2 (device limit):",
   r.status,
-  r.body.error ? "blocked ok" : "NOT BLOCKED FAIL",
+  r.status === 409 ? "409 ok" : "NOT 409 FAIL",
 );
 
-const hit2 = s.hits[1] ?? hit;
-r = await j(
-  await fetch(`${BASE}/api/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...hit2, nickname: "지훈" }),
-  }),
-);
-console.log("4. request diff nick:", r.status, r.body.ok ? "ok" : r.body.error);
+// 6. 본인 곡 취소
+let st = (await (await guestFetch("/api/state")).json()) as QueueState;
+const mine = st.queue.find((x) => x.requestedBy === tableInfo.label);
+if (mine) {
+  r = await j(
+    await guestFetch("/api/cancel", {
+      method: "POST",
+      body: JSON.stringify({ id: mine.id }),
+    }),
+  );
+  console.log("6. cancel own:", r.status, r.body.ok ? "ok" : "FAIL");
+}
 
+// 7. 어드민 무토큰 401
 r = await j(await fetch(`${BASE}/api/admin/skip`, { method: "POST" }));
 console.log(
-  "5. admin no token:",
+  "7. admin no token:",
   r.status,
-  r.status === 401 ? "401 ok" : "NOT 401 FAIL",
+  r.status === 401 ? "401 ok" : "FAIL",
 );
 
+// 8. 어드민 추가 + 순서 뒤집기
+const addBody = { ...hit, tableId: table.id, tableSecret: k };
 r = await j(
   await fetch(`${BASE}/api/admin/add`, {
     method: "POST",
@@ -84,12 +147,10 @@ r = await j(
     body: JSON.stringify(hit),
   }),
 );
-console.log("6. admin add:", r.status, r.body.ok ? "ok" : r.body.error);
+console.log("8. admin add:", r.status, r.body.ok ? "ok" : r.body.error);
 
-let st = (await (await fetch(`${BASE}/api/state`)).json()) as QueueState;
+st = (await (await fetch(`${BASE}/api/state`)).json()) as QueueState;
 const ids = st.queue.map((x) => x.id);
-console.log("7. state queue len:", st.queue.length, "ids:", ids.length);
-
 if (ids.length >= 2) {
   const reversed = [...ids].reverse();
   r = await j(
@@ -100,45 +161,49 @@ if (ids.length >= 2) {
     }),
   );
   st = (await (await fetch(`${BASE}/api/state`)).json()) as QueueState;
-  const newOrder = st.queue.map((x) => x.id);
   console.log(
-    "8. reorder:",
+    "9. reorder:",
     r.status,
-    r.body.ok ? "ok" : "?",
-    "reversed match:",
-    JSON.stringify(newOrder) === JSON.stringify(reversed),
+    JSON.stringify(st.queue.map((x) => x.id)) === JSON.stringify(reversed)
+      ? "ok"
+      : "FAIL",
   );
 }
 
-if (st.queue.length) {
-  const lastQueuedSong = st.queue.at(-1);
-  if (!lastQueuedSong) throw new Error("Queue unexpectedly became empty");
-  const removeId = lastQueuedSong.id;
-  r = await j(
-    await fetch(`${BASE}/api/admin/remove`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-token": TOKEN },
-      body: JSON.stringify({ id: removeId }),
-    }),
-  );
-  st = (await (await fetch(`${BASE}/api/state`)).json()) as QueueState;
-  console.log(
-    "9. remove:",
-    r.status,
-    r.body.ok ? "ok" : "?",
-    "queue len now:",
-    st.queue.length,
-  );
-}
-
+// 10. 신청 일시중지 토글
 r = await j(
-  await fetch(`${BASE}/api/request`, {
+  await fetch(`${BASE}/api/admin/settings`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nickname: "" }),
+    headers: { "Content-Type": "application/json", "x-admin-token": TOKEN },
+    body: JSON.stringify({ requestsPaused: true }),
   }),
 );
-console.log("10. bad body:", r.status, r.body.error);
+r = await j(
+  await guestFetch("/api/request", {
+    method: "POST",
+    body: JSON.stringify({ ...addBody }),
+  }),
+);
+console.log(
+  "10. request while paused:",
+  r.status,
+  r.status === 403 ? "403 ok" : "NOT 403 FAIL",
+);
+await j(
+  await fetch(`${BASE}/api/admin/settings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-token": TOKEN },
+    body: JSON.stringify({ requestsPaused: false, notice: "" }),
+  }),
+);
 
-console.log("\n=== final state ===");
-console.log(JSON.stringify(st, null, 2));
+// 11. 테이블 정리
+r = await j(
+  await fetch(`${BASE}/api/admin/tables/${table.id}`, {
+    method: "DELETE",
+    headers: { "x-admin-token": TOKEN },
+  }),
+);
+console.log("11. table cleanup:", r.status, r.body.ok ? "ok" : "FAIL");
+
+console.log("\n✅ test-flow done — 큐에 남은 곡은 어드민에서 확인/삭제하세요");

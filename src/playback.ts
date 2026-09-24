@@ -79,6 +79,30 @@ async function setVolume(v: number): Promise<void> {
   );
 }
 
+async function getPlayerPosition(): Promise<number | null> {
+  try {
+    const out = await osa('tell application "Music" to get player position');
+    const n = Number(out);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  } catch (error) {
+    if (error instanceof Error) return null;
+    throw error;
+  }
+}
+
+async function getTrackDuration(): Promise<number | null> {
+  try {
+    const out = await osa(
+      'tell application "Music" to get duration of current track',
+    );
+    const n = Number(out);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch (error) {
+    if (error instanceof Error) return null;
+    throw error;
+  }
+}
+
 async function waitForCurrentTrackId(
   currentTrackId: TrackNavigator["currentTrackId"],
   timeoutMs = 8000,
@@ -156,14 +180,27 @@ async function waitForStart(timeoutMs = 12000): Promise<boolean> {
   return false;
 }
 
+// Polls Music.app once a second, publishing playback position so guests see a
+// live progress bar, and resolves when the track stops.
 async function waitForEnd(): Promise<void> {
+  const duration = await getTrackDuration();
+  if (duration !== null) state.updateProgress(0, duration);
   while (true) {
-    await sleep(1500);
+    await sleep(1000);
+    const position = await getPlayerPosition();
+    if (position !== null) state.updateProgress(position, duration);
     if ((await getPlayerState()) === "stopped") return;
   }
 }
 
 export async function startPlaybackLoop(): Promise<void> {
+  // A song restored from SQLite after a server restart is already playing in
+  // Music.app — do not restart it, just wait for it to finish.
+  if (state.nowPlayingSong()) {
+    console.log("resuming restored now-playing: waiting for it to end");
+    await waitForEnd();
+    state.finishNowPlaying("done");
+  }
   while (true) {
     const song = state.takeNext();
     if (!song) {
