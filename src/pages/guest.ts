@@ -2,7 +2,7 @@ import {
   createReactRouteSnapshot,
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 
 export type GuestDocumentProps = {
   readonly stylesheets: readonly string[];
@@ -41,8 +41,6 @@ type SearchHit = {
   trackNumber: number;
   durationSec: number | null;
 };
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function fmt(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return "-:--";
@@ -138,12 +136,12 @@ function GuestApp({
     toastTimer.current = window.setTimeout(() => setToast(null), 3000);
   };
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/state");
       setSnap(await res.json());
     } catch {}
-  };
+  }, []);
 
   // 실시간: SSE 구독, 실패 시 폴링 폴백
   useEffect(() => {
@@ -163,7 +161,7 @@ function GuestApp({
       es.close();
       if (poll) window.clearInterval(poll);
     };
-  }, [error]);
+  }, [error, refresh]);
 
   // 기기 id 조회 (신청 버튼 상태/내 곡 판정용)
   useEffect(() => {
@@ -322,6 +320,7 @@ function GuestApp({
         createElement(
           "button",
           {
+            type: "button",
             className: "gobtn",
             onClick: () => doSearch(),
             disabled: searching,
@@ -352,6 +351,7 @@ function GuestApp({
           createElement(
             "button",
             {
+              type: "button",
               className: "req",
               disabled: blocked || searching,
               onClick: () => request(h),
@@ -365,6 +365,7 @@ function GuestApp({
       ? createElement(
           "button",
           {
+            type: "button",
             className: "mini",
             onClick: () => setSheetOpen(true),
             "aria-label": "재생 화면 열기",
@@ -395,6 +396,7 @@ function GuestApp({
       createElement(
         "button",
         {
+          type: "button",
           className: "grabber",
           onClick: () => setSheetOpen(false),
           "aria-label": "닫기",
@@ -453,6 +455,7 @@ function GuestApp({
       createElement(
         "button",
         {
+          type: "button",
           className: `qtoggle${queueOpen ? " exp" : ""}`,
           onClick: () => setQueueOpen(!queueOpen),
         },
@@ -501,6 +504,7 @@ function GuestApp({
                     ? createElement(
                         "button",
                         {
+                          type: "button",
                           className: "cancelx",
                           onClick: () => cancel(s.id),
                           "aria-label": "신청 취소",
@@ -533,7 +537,7 @@ function renderHint(
     ? "잠시 후에 곡 신청을 받아요"
     : mine
       ? "신청한 곡이 재생 대기 중이에요. 끝나면 또 신청할 수 있어요"
-      : snap && snap.queue.length
+      : snap?.queue.length
         ? null
         : "신청하고 싶은 곡을 검색해보세요";
   if (!text) return null;

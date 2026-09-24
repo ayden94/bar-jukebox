@@ -568,3 +568,394 @@ input::placeholder {
   transform: translateY(10px);
   pointer-events: none;
 }
+
+/* ── 어드민 (fluo React) ─────────────────────────── */
+.admin-root {
+  padding: 20px;
+  background: #0d0d10;
+  min-height: 100vh;
+}
+
+.admin-root .wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 22px;
+}
+
+@media (max-width: 760px) {
+  .admin-root .wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-root h1 {
+  font-size: 1.25rem;
+  margin: 0 0 14px;
+  letter-spacing: -0.02em;
+}
+
+.admin-root h2 {
+  font-size: 0.85rem;
+  color: #98989d;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 18px 0 10px;
+}
+
+.admin-root .panel {
+  background: #16161c;
+  border: 1px solid #26262e;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 4px;
+}
+
+.admin-root .now {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.admin-root .now img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: #2a2a32;
+}
+
+.admin-root .now .label {
+  font-size: 0.7rem;
+  color: #ff9f0a;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.admin-root .now .title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.admin-root .now .artist {
+  font-size: 0.82rem;
+  color: #98989d;
+}
+
+.admin-root .progress {
+  height: 4px;
+  background: #26262e;
+  border-radius: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.admin-root .progress .bar {
+  height: 100%;
+  width: 0%;
+  background: #ff9f0a;
+  border-radius: 2px;
+}
+
+.admin-root .empty {
+  color: #6b6b70;
+  font-size: 0.9rem;
+}
+
+.admin-root .btn {
+  background: #ff9f0a;
+  color: #1a1a00;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.admin-root .btn.ghost {
+  background: #1a1a20;
+  color: #f5f5f7;
+  border: 1px solid #2a2a32;
+}
+
+.admin-root .btn.danger {
+  background: #ff453a;
+  color: #fff;
+}
+
+.admin-root .btn.okstate {
+  background: #30d158;
+  color: #fff;
+}
+
+.admin-root .btn:disabled {
+  opacity: 0.4;
+}
+
+.admin-root .skiprow {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.admin-root .queue,
+.admin-root .tablelist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-root .queue li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.admin-root .queue li.dragging {
+  opacity: 0.4;
+}
+
+.admin-root .queue li.dragover {
+  border-color: #ff9f0a;
+}
+
+.admin-root .queue img,
+.admin-root .tablelist img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: #2a2a32;
+}
+
+.admin-root .queue .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-root .queue .t {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-root .queue .a {
+  font-size: 0.76rem;
+  color: #98989d;
+}
+
+.admin-root .queue .by {
+  font-size: 0.72rem;
+  color: #6b6b70;
+  flex-shrink: 0;
+}
+
+.admin-root .queue .grip {
+  cursor: grab;
+  color: #6b6b70;
+  user-select: none;
+  padding: 0 4px;
+}
+
+.admin-root .queue .del {
+  background: none;
+  border: none;
+  color: #ff453a;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px;
+}
+
+.admin-root .field {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.admin-root input {
+  flex: 1;
+  background: #1a1a20;
+  border: 1px solid #2a2a32;
+  color: #f5f5f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.admin-root input:focus {
+  border-color: #ff9f0a;
+}
+
+.admin-root .searchres {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.admin-root .searchres li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #1c1c22;
+}
+
+.admin-root .searchres img {
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+}
+
+.admin-root .searchres .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-root .searchres .t {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-root .searchres .a {
+  font-size: 0.74rem;
+  color: #98989d;
+}
+
+.admin-root .tablelist li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #1c1c22;
+  flex-wrap: wrap;
+}
+
+.admin-root .tablelist .tlabel {
+  flex: 1;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.admin-root .tablelist .tlabel small {
+  color: #6b6b70;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.admin-root .qrbox {
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.admin-root .qrbox svg {
+  width: 170px;
+  height: 170px;
+}
+
+.admin-root .qrbox .qurl {
+  color: #333;
+  font-size: 0.72rem;
+  word-break: break-all;
+  margin-top: 6px;
+}
+
+.admin-root .settingrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.admin-root .settingrow label {
+  font-size: 0.85rem;
+  color: #98989d;
+  flex-shrink: 0;
+}
+
+.admin-root .note {
+  font-size: 0.78rem;
+  color: #6b6b70;
+  line-height: 1.5;
+}
+
+.gate {
+  max-width: 360px;
+  margin: 80px auto;
+  text-align: center;
+}
+
+.gate input {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.gate .note {
+  font-size: 0.78rem;
+  color: #6b6b70;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+#printArea {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #fff;
+    padding: 0;
+  }
+
+  body.printing > *:not(#printArea) {
+    /* biome-ignore lint/complexity/noImportantStyles: 인쇄 시 나머지 UI를 확실히 가리기 위한 오버라이드 */
+    display: none !important;
+  }
+
+  .qcards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .qcard h3 {
+    margin: 0 0 10px;
+    font-size: 1.15rem;
+  }
+
+  /* biome-ignore lint/style/noDescendingSpecificity: 인쇄 블록은 @media+body.printing으로 스코프가 분리됨 */
+  .qcard svg {
+    width: 170px;
+    height: 170px;
+  }
+
+  /* biome-ignore lint/style/noDescendingSpecificity: 인쇄 블록은 @media+body.printing으로 스코프가 분리됨 */
+  .qcard .qurl {
+    font-size: 0.68rem;
+    color: #444;
+    word-break: break-all;
+  }
+
+  .qcard .qhint {
+    font-size: 0.8rem;
+    margin-top: 6px;
+  }
+
+  #printArea {
+    display: block;
+    background: #fff;
+  }
+}
