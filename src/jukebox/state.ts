@@ -3,7 +3,7 @@ import type { JukeboxState, NowPlaying, Song } from "./types";
 
 const MAX_HISTORY = 50;
 
-class JukeboxStateStore {
+export class JukeboxStateStore {
   private nowPlaying: NowPlaying | null = null;
   private queue: Song[] = [];
   private history: Song[] = [];

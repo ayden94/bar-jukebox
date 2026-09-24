@@ -5,12 +5,12 @@ import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import QRCode from "qrcode";
 import { z } from "zod";
-import { onChange } from "./bus";
-import * as db from "./db";
-import { startPlaybackLoop, stopPlayback } from "./playback";
-import { searchMusic } from "./search";
-import { state } from "./state";
-import type { Song } from "./types";
+import { onChange } from "./jukebox/bus";
+import * as db from "./jukebox/db";
+import { startPlaybackLoop, stopPlayback } from "./jukebox/playback";
+import { searchMusic } from "./jukebox/search";
+import { state } from "./jukebox/state";
+import type { Song } from "./jukebox/types";
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const PORT = Number(process.env.PORT ?? 5173);

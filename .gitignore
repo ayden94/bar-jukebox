@@ -5,6 +5,7 @@ node_modules/
 .DS_Store
 *.log
 .debug-journal.md
+dist/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
