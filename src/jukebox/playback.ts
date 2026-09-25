@@ -180,16 +180,33 @@ async function waitForStart(timeoutMs = 12000): Promise<boolean> {
   return false;
 }
 
-// Polls Music.app once a second, publishing playback position so guests see a
-// live progress bar, and resolves when the track stops.
-async function waitForEnd(): Promise<void> {
+// Music.app queues the whole album when we open a music:// album URL, so it
+// auto-advances to the next album track once the requested song ends — player
+// state stays "playing" and the queue would stall until the album runs out.
+// Resolve the real track end instead: watch the current track id each tick
+// and stop Music.app the moment it changes, plus a hard stop just before the
+// known duration so the next album track never reaches the speakers.
+async function waitForTrackEnd(expectedTrackId: number | null): Promise<void> {
   const duration = await getTrackDuration();
   if (duration !== null) state.updateProgress(0, duration);
   while (true) {
-    await sleep(1000);
     const position = await getPlayerPosition();
     if (position !== null) state.updateProgress(position, duration);
     if ((await getPlayerState()) === "stopped") return;
+    if (expectedTrackId !== null) {
+      const id = await readCurrentTrackId();
+      if (id !== null && id !== expectedTrackId) {
+        await stopPlayback();
+        return;
+      }
+    }
+    if (duration !== null && position !== null && position >= duration - 0.15) {
+      await stopPlayback();
+      return;
+    }
+    const nearEnd =
+      duration !== null && position !== null && position >= duration - 3;
+    await sleep(nearEnd ? 120 : 300);
   }
 }
 
@@ -198,7 +215,7 @@ export async function startPlaybackLoop(): Promise<void> {
   // Music.app — do not restart it, just wait for it to finish.
   if (state.nowPlayingSong()) {
     console.log("resuming restored now-playing: waiting for it to end");
-    await waitForEnd();
+    await waitForTrackEnd(await readCurrentTrackId());
     state.finishNowPlaying("done");
   }
   while (true) {
@@ -227,7 +244,7 @@ export async function startPlaybackLoop(): Promise<void> {
       continue;
     }
 
-    await waitForEnd();
+    await waitForTrackEnd(await readCurrentTrackId());
     state.finishNowPlaying("done");
     console.log(`\u25a0 finished: ${song.trackName}`);
   }
