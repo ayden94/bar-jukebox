@@ -6,6 +6,67 @@
   --sub: #8e8e93;
   --line: #2a2a2c;
   --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 테마 변수 (다크 기본) */
+  --bg: #000;
+  --text: #f5f5f7;
+  --card-bg: #1c1c1e;
+  --input-border: #2a2a32;
+  --row-border: #151517;
+  --mini-bg: rgba(30, 30, 32, 0.92);
+  --mini-border: #2e2e30;
+  --sheet-bg: #0b0b0d;
+  --toast-bg: #2a2a2c;
+  --toast-border: #3a3a3c;
+  --banner-pause-bg: rgba(250, 35, 59, 0.14);
+  --banner-pause-text: #ff8a96;
+  --banner-pause-border: rgba(250, 35, 59, 0.35);
+  --banner-notice-bg: rgba(255, 159, 10, 0.12);
+  --banner-notice-text: #ffc46b;
+  --banner-notice-border: rgba(255, 159, 10, 0.3);
+  --admin-bg: #0d0d10;
+  --admin-panel: #16161c;
+  --admin-panel-border: #26262e;
+  --admin-accent: #ff9f0a;
+  --admin-accent-text: #1a1a00;
+  --admin-input-bg: #1a1a20;
+  --admin-input-border: #2a2a32;
+  --admin-btn-ghost-bg: #1a1a20;
+  --admin-btn-ghost-border: #2a2a32;
+  --admin-sub2: #6b6b70;
+  --admin-progress-bg: #26262e;
+  --admin-row-border: #1c1c22;
+  --admin-red: #ff453a;
+  --admin-green: #30d158;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fff;
+  --text: #1d1d1f;
+  --card-bg: #f2f2f7;
+  --input-border: #d2d2d7;
+  --row-border: #e5e5ea;
+  --mini-bg: rgba(245, 245, 247, 0.92);
+  --mini-border: #d2d2d7;
+  --sheet-bg: #f5f5f7;
+  --toast-bg: #fff;
+  --toast-border: #d2d2d7;
+  --banner-pause-bg: rgba(250, 35, 59, 0.1);
+  --banner-pause-text: #c9252f;
+  --banner-pause-border: rgba(250, 35, 59, 0.4);
+  --banner-notice-bg: rgba(255, 159, 10, 0.14);
+  --banner-notice-text: #9a6b00;
+  --banner-notice-border: rgba(255, 159, 10, 0.45);
+  --admin-bg: #f5f5f7;
+  --admin-panel: #fff;
+  --admin-panel-border: #e0e0e5;
+  --admin-input-bg: #fff;
+  --admin-input-border: #d2d2d7;
+  --admin-btn-ghost-bg: #f2f2f7;
+  --admin-btn-ghost-border: #d2d2d7;
+  --admin-sub2: #8e8e93;
+  --admin-progress-bg: #e5e5ea;
+  --admin-row-border: #e5e5ea;
 }
 
 * {
@@ -20,8 +81,8 @@ body {
 }
 
 body {
-  background: #000;
-  color: #f5f5f7;
+  background: var(--bg);
+  color: var(--text);
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro KR", "Pretendard", system-ui,
     sans-serif;
@@ -67,6 +128,13 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 14px 0 4px;
+  gap: 8px;
+}
+
+.top .topright {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand {
@@ -88,6 +156,18 @@ button {
   padding: 6px 12px;
 }
 
+.themebtn {
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
 .banner {
   border-radius: 12px;
   padding: 10px 14px;
@@ -96,21 +176,21 @@ button {
 }
 
 .banner.pause {
-  background: rgba(250, 35, 59, 0.14);
-  color: #ff8a96;
-  border: 1px solid rgba(250, 35, 59, 0.35);
+  background: var(--banner-pause-bg);
+  color: var(--banner-pause-text);
+  border: 1px solid var(--banner-pause-border);
 }
 
 .banner.notice {
-  background: rgba(255, 159, 10, 0.12);
-  color: #ffc46b;
-  border: 1px solid rgba(255, 159, 10, 0.3);
+  background: var(--banner-notice-bg);
+  color: var(--banner-notice-text);
+  border: 1px solid var(--banner-notice-border);
 }
 
 .searchwrap {
   position: sticky;
   top: 0;
-  background: linear-gradient(#000 82%, transparent);
+  background: linear-gradient(var(--bg) 82%, transparent);
   padding: 8px 0 12px;
   z-index: 5;
   margin: 0 -18px;
@@ -125,9 +205,9 @@ button {
 
 input[type="search"] {
   flex: 1;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: #f5f5f7;
+  background: var(--card-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text);
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 1rem;
@@ -171,14 +251,14 @@ input::placeholder {
   gap: 12px;
   align-items: center;
   padding: 9px 0;
-  border-bottom: 1px solid #151517;
+  border-bottom: 1px solid var(--row-border);
 }
 
 .results img {
   width: 48px;
   height: 48px;
   border-radius: 7px;
-  background: var(--card);
+  background: var(--card-bg);
   object-fit: cover;
 }
 
@@ -215,7 +295,7 @@ input::placeholder {
 }
 
 .req:disabled {
-  background: #333336;
+  background: var(--card2);
   color: #6b6b70;
 }
 
@@ -229,15 +309,15 @@ input::placeholder {
   align-items: center;
   gap: 11px;
   text-align: left;
-  background: rgba(30, 30, 32, 0.92);
+  background: var(--mini-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid #2e2e30;
+  border: 1px solid var(--mini-border);
   border-radius: 16px;
   padding: 8px 14px 8px 8px;
   cursor: pointer;
   z-index: 20;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
 .mini:active {
@@ -249,7 +329,7 @@ input::placeholder {
   height: 42px;
   border-radius: 7px;
   object-fit: cover;
-  background: var(--card);
+  background: var(--card-bg);
 }
 
 .mini .mi {
@@ -318,7 +398,7 @@ input::placeholder {
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: #0b0b0d;
+  background: var(--sheet-bg);
   transform: translateY(100%);
   transition: transform 0.45s var(--spring);
   pointer-events: none;
@@ -355,8 +435,8 @@ input::placeholder {
   object-fit: cover;
   border-radius: 12px;
   margin: 14px auto 20px;
-  background: var(--card);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.65);
+  background: var(--card-bg);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.25);
 }
 
 .nplabel {
@@ -383,15 +463,15 @@ input::placeholder {
   display: inline-block;
   margin-top: 10px;
   font-size: 0.75rem;
-  color: #d8d8dc;
-  background: var(--card);
+  color: var(--text);
+  background: var(--card-bg);
   border-radius: 999px;
   padding: 5px 12px;
 }
 
 .progress {
   height: 4px;
-  background: #2a2a2c;
+  background: var(--line);
   border-radius: 2px;
   margin: 26px 0 6px;
   overflow: hidden;
@@ -420,9 +500,9 @@ input::placeholder {
   justify-content: space-between;
   background: none;
   border: none;
-  border-top: 1px solid #1c1c1e;
+  border-top: 1px solid var(--line);
   margin-top: 26px;
-  color: #f5f5f7;
+  color: var(--text);
   font-size: 0.95rem;
   font-weight: 700;
   padding: 16px 2px;
@@ -485,7 +565,7 @@ input::placeholder {
   height: 42px;
   border-radius: 6px;
   object-fit: cover;
-  background: var(--card);
+  background: var(--card-bg);
 }
 
 .qlist .info {
@@ -521,8 +601,8 @@ input::placeholder {
 
 .cancelx {
   background: none;
-  border: 1px solid #3a3a3c;
-  color: #ff8a96;
+  border: 1px solid var(--input-border);
+  color: var(--accent);
   border-radius: 999px;
   width: 26px;
   height: 26px;
@@ -543,8 +623,9 @@ input::placeholder {
   left: 18px;
   right: 18px;
   bottom: calc(84px + env(safe-area-inset-bottom));
-  background: #2a2a2c;
-  border: 1px solid #3a3a3c;
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-border);
+  color: var(--text);
   border-radius: 14px;
   padding: 13px 16px;
   font-size: 0.9rem;
@@ -572,8 +653,68 @@ input::placeholder {
 /* ── 어드민 (fluo React) ─────────────────────────── */
 .admin-root {
   padding: 20px;
-  background: #0d0d10;
+  background: var(--admin-bg);
   min-height: 100vh;
+}
+
+.admin-root h1 {
+  font-size: 1.25rem;
+  margin: 0 0 14px;
+  letter-spacing: -0.02em;
+}
+
+.admin-root .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.admin-root .topbar h1 {
+  margin: 0;
+}
+
+.admin-root .topbar .topright {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-root .themebtn {
+  background: var(--admin-panel);
+  border: 1px solid var(--admin-panel-border);
+  color: var(--text);
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.admin-root .tabbar {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 16px;
+}
+
+.admin-root .tabbar .tab {
+  background: var(--admin-panel);
+  border: 1px solid var(--admin-panel-border);
+  color: var(--sub);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.admin-root .tabbar .tab.active {
+  background: var(--admin-accent);
+  color: var(--admin-accent-text);
+  border-color: var(--admin-accent);
 }
 
 .admin-root .wrap {
@@ -590,23 +731,17 @@ input::placeholder {
   }
 }
 
-.admin-root h1 {
-  font-size: 1.25rem;
-  margin: 0 0 14px;
-  letter-spacing: -0.02em;
-}
-
 .admin-root h2 {
   font-size: 0.85rem;
-  color: #98989d;
+  color: var(--sub);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 18px 0 10px;
 }
 
 .admin-root .panel {
-  background: #16161c;
-  border: 1px solid #26262e;
+  background: var(--admin-panel);
+  border: 1px solid var(--admin-panel-border);
   border-radius: 14px;
   padding: 16px;
   margin-bottom: 4px;
@@ -623,12 +758,12 @@ input::placeholder {
   width: 56px;
   height: 56px;
   border-radius: 8px;
-  background: #2a2a32;
+  background: var(--admin-input-bg);
 }
 
 .admin-root .now .label {
   font-size: 0.7rem;
-  color: #ff9f0a;
+  color: var(--admin-accent);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -640,12 +775,12 @@ input::placeholder {
 
 .admin-root .now .artist {
   font-size: 0.82rem;
-  color: #98989d;
+  color: var(--sub);
 }
 
 .admin-root .progress {
   height: 4px;
-  background: #26262e;
+  background: var(--admin-progress-bg);
   border-radius: 2px;
   margin-top: 10px;
   overflow: hidden;
@@ -654,18 +789,18 @@ input::placeholder {
 .admin-root .progress .bar {
   height: 100%;
   width: 0%;
-  background: #ff9f0a;
+  background: var(--admin-accent);
   border-radius: 2px;
 }
 
 .admin-root .empty {
-  color: #6b6b70;
+  color: var(--admin-sub2);
   font-size: 0.9rem;
 }
 
 .admin-root .btn {
-  background: #ff9f0a;
-  color: #1a1a00;
+  background: var(--admin-accent);
+  color: var(--admin-accent-text);
   border: none;
   border-radius: 10px;
   padding: 9px 14px;
@@ -675,18 +810,18 @@ input::placeholder {
 }
 
 .admin-root .btn.ghost {
-  background: #1a1a20;
-  color: #f5f5f7;
-  border: 1px solid #2a2a32;
+  background: var(--admin-btn-ghost-bg);
+  color: var(--text);
+  border: 1px solid var(--admin-btn-ghost-border);
 }
 
 .admin-root .btn.danger {
-  background: #ff453a;
+  background: var(--admin-red);
   color: #fff;
 }
 
 .admin-root .btn.okstate {
-  background: #30d158;
+  background: var(--admin-green);
   color: #fff;
 }
 
@@ -721,7 +856,7 @@ input::placeholder {
 }
 
 .admin-root .queue li.dragover {
-  border-color: #ff9f0a;
+  border-color: var(--admin-accent);
 }
 
 .admin-root .queue img,
@@ -729,7 +864,7 @@ input::placeholder {
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: #2a2a32;
+  background: var(--admin-input-bg);
 }
 
 .admin-root .queue .info {
@@ -746,18 +881,18 @@ input::placeholder {
 
 .admin-root .queue .a {
   font-size: 0.76rem;
-  color: #98989d;
+  color: var(--sub);
 }
 
 .admin-root .queue .by {
   font-size: 0.72rem;
-  color: #6b6b70;
+  color: var(--admin-sub2);
   flex-shrink: 0;
 }
 
 .admin-root .queue .grip {
   cursor: grab;
-  color: #6b6b70;
+  color: var(--admin-sub2);
   user-select: none;
   padding: 0 4px;
 }
@@ -765,7 +900,7 @@ input::placeholder {
 .admin-root .queue .del {
   background: none;
   border: none;
-  color: #ff453a;
+  color: var(--admin-red);
   cursor: pointer;
   font-size: 1.1rem;
   padding: 4px;
@@ -779,9 +914,9 @@ input::placeholder {
 
 .admin-root input {
   flex: 1;
-  background: #1a1a20;
-  border: 1px solid #2a2a32;
-  color: #f5f5f7;
+  background: var(--admin-input-bg);
+  border: 1px solid var(--admin-input-border);
+  color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.95rem;
@@ -789,7 +924,7 @@ input::placeholder {
 }
 
 .admin-root input:focus {
-  border-color: #ff9f0a;
+  border-color: var(--admin-accent);
 }
 
 .admin-root .searchres {
@@ -805,7 +940,7 @@ input::placeholder {
   gap: 10px;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid #1c1c22;
+  border-bottom: 1px solid var(--admin-row-border);
 }
 
 .admin-root .searchres img {
@@ -828,7 +963,7 @@ input::placeholder {
 
 .admin-root .searchres .a {
   font-size: 0.74rem;
-  color: #98989d;
+  color: var(--sub);
 }
 
 .admin-root .tablelist li {
@@ -836,7 +971,7 @@ input::placeholder {
   gap: 10px;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid #1c1c22;
+  border-bottom: 1px solid var(--admin-row-border);
   flex-wrap: wrap;
 }
 
@@ -847,7 +982,7 @@ input::placeholder {
 }
 
 .admin-root .tablelist .tlabel small {
-  color: #6b6b70;
+  color: var(--admin-sub2);
   font-weight: 400;
   margin-left: 6px;
 }
@@ -881,13 +1016,13 @@ input::placeholder {
 
 .admin-root .settingrow label {
   font-size: 0.85rem;
-  color: #98989d;
+  color: var(--sub);
   flex-shrink: 0;
 }
 
 .admin-root .note {
   font-size: 0.78rem;
-  color: #6b6b70;
+  color: var(--admin-sub2);
   line-height: 1.5;
 }
 
@@ -904,7 +1039,7 @@ input::placeholder {
 
 .gate .note {
   font-size: 0.78rem;
-  color: #6b6b70;
+  color: var(--admin-sub2);
   margin-top: 10px;
   line-height: 1.5;
 }
@@ -914,14 +1049,19 @@ input::placeholder {
 }
 
 @media print {
-  body {
-    background: #fff;
-    padding: 0;
-  }
-
   body.printing > *:not(#printArea) {
     /* biome-ignore lint/complexity/noImportantStyles: 인쇄 시 나머지 UI를 확실히 가리기 위한 오버라이드 */
     display: none !important;
+  }
+
+  #printArea {
+    display: block;
+    background: #fff;
+  }
+
+  body {
+    background: #fff;
+    padding: 0;
   }
 
   .qcards {
@@ -952,10 +1092,5 @@ input::placeholder {
   .qcard .qhint {
     font-size: 0.8rem;
     margin-top: 6px;
-  }
-
-  #printArea {
-    display: block;
-    background: #fff;
   }
 }

@@ -14,13 +14,14 @@ export async function fetchArtwork(rawUrl: string): Promise<ArtworkResult> {
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" || !ALLOWED_HOST.test(url.hostname)) return null;
+  if (url.protocol !== "https:" || !ALLOWED_HOST.test(url.hostname))
+    return null;
 
   const hit = cache.get(rawUrl);
   if (hit) return hit;
 
   const res = await fetch(url).catch(() => null);
-  if (!res || !res.ok) return null;
+  if (!res?.ok) return null;
   const contentType = res.headers.get("content-type") ?? "image/jpeg";
   const body = await res.arrayBuffer();
 

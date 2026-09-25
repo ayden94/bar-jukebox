@@ -3,6 +3,7 @@ import {
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { themeScript, useTheme } from "./theme";
 
 export type AdminDocumentProps = {
   readonly stylesheets: readonly string[];
@@ -53,7 +54,7 @@ export function AdminDocument({ stylesheets }: AdminDocumentProps) {
     },
     createElement(
       "html",
-      { "data-page": "admin", lang: "ko" },
+      { suppressHydrationWarning: true, "data-page": "admin", lang: "ko" },
       createElement(
         "head",
         null,
@@ -63,6 +64,10 @@ export function AdminDocument({ stylesheets }: AdminDocumentProps) {
           name: "viewport",
         }),
         createElement("title", null, "주크박스 관리"),
+        createElement("script", {
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: 저장된 테마를 첫 페인트 전에 적용하는 고정 스크립트
+          dangerouslySetInnerHTML: { __html: themeScript },
+        }),
         ...stylesheets.map((href) =>
           createElement("link", {
             "data-vite-style": true,
@@ -85,13 +90,12 @@ export function AdminDocument({ stylesheets }: AdminDocumentProps) {
   );
 }
 
-const art = (u: string): string =>
-  u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;
-
 function AdminApp() {
+  const [theme, toggleTheme] = useTheme();
   const [token, setToken] = useState("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
+  const [activeTab, setActiveTab] = useState<"songs" | "qr">("songs");
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tables, setTables] = useState<TableRow[]>([]);
   const [qrCache, setQrCache] = useState<
@@ -165,6 +169,15 @@ function AdminApp() {
     );
   }, []);
 
+  // 탭을 URL 해시와 동기화 (/admin#qr → QR 관리)
+  useEffect(() => {
+    const sync = () =>
+      setActiveTab(window.location.hash === "#qr" ? "qr" : "songs");
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+
   useEffect(() => {
     if (!snap) return;
     setPaused(snap.requestsPaused);
@@ -189,6 +202,11 @@ function AdminApp() {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     refresh();
+  };
+
+  const switchTab = (t: "songs" | "qr") => {
+    window.location.hash = t === "qr" ? "#qr" : "#songs";
+    setActiveTab(t);
   };
 
   const songRow = (s: SongView, draggable: boolean) =>
@@ -239,8 +257,8 @@ function AdminApp() {
         ? createElement(
             "button",
             {
-              type: "button",
               className: "del",
+              type: "button",
               onClick: () => act("/api/admin/remove", { id: s.id }),
             },
             "✕",
@@ -264,11 +282,7 @@ function AdminApp() {
         }),
         createElement(
           "button",
-          {
-            type: "button",
-            className: "btn",
-            onClick: login,
-          },
+          { className: "btn", onClick: login, type: "button" },
           "들어가기",
         ),
         createElement(
@@ -306,8 +320,8 @@ function AdminApp() {
         createElement(
           "button",
           {
-            type: "button",
             className: "btn ghost",
+            type: "button",
             onClick: async () => {
               if (qrOpenId === t.id) {
                 setQrOpenId(null);
@@ -330,8 +344,8 @@ function AdminApp() {
         createElement(
           "button",
           {
-            type: "button",
             className: "btn danger",
+            type: "button",
             onClick: async () => {
               if (
                 !window.confirm(
@@ -368,272 +382,320 @@ function AdminApp() {
     return rows;
   });
 
+  const tabBtn = (id: "songs" | "qr", label: string) =>
+    createElement(
+      "button",
+      {
+        className: `tab${activeTab === id ? " active" : ""}`,
+        type: "button",
+        onClick: () => switchTab(id),
+      },
+      label,
+    );
+
   return createElement(
     "div",
     { className: "admin-root" },
     createElement(
       "div",
-      { className: "wrap" },
+      { className: "topbar" },
+      createElement("h1", null, "주크박스 관리"),
       createElement(
         "div",
-        null,
-        createElement("h1", null, "주크박스 관리"),
-        createElement("h2", null, "지금 재생중"),
+        { className: "topright" },
         createElement(
-          "div",
-          { className: "panel" },
-          createElement(
-            "div",
-            { className: "now" },
-            npSong
-              ? [
-                  createElement("img", {
-                    src: art(npSong.artworkUrl),
-                    key: "art",
-                  }),
-                  createElement(
-                    "div",
-                    { key: "info" },
-                    createElement("div", { className: "label" }, "재생중"),
-                    createElement(
-                      "div",
-                      { className: "title" },
-                      npSong.trackName,
-                    ),
-                    createElement(
-                      "div",
-                      { className: "artist" },
-                      `${npSong.artistName} · ${npSong.requestedBy}`,
-                    ),
-                  ),
-                ]
-              : createElement(
-                  "div",
-                  { className: "empty" },
-                  "재생중인 곡이 없어요",
-                ),
-          ),
-          np
-            ? createElement(
-                "div",
-                { className: "progress" },
-                createElement("div", {
-                  className: "bar",
-                  style: { width: `${progressPct}%` },
-                }),
-              )
-            : null,
-          createElement(
-            "div",
-            { className: "skiprow" },
-            createElement(
-              "button",
-              {
-                type: "button",
-                className: "btn danger",
-                disabled: !np,
-                onClick: () => act("/api/admin/skip"),
-              },
-              "⏭ 스킵 (다음 곡으로)",
-            ),
-          ),
-        ),
-        createElement("h2", { style: { marginTop: "18px" } }, "대기열"),
-        createElement(
-          "div",
-          { className: "panel" },
-          createElement(
-            "ul",
-            { className: "queue" },
-            queue.map((s) => songRow(s, true)),
-          ),
-          queue.length
-            ? null
-            : createElement("div", { className: "empty" }, "대기열이 비었어요"),
-        ),
-        createElement("h2", { style: { marginTop: "18px" } }, "최근 재생"),
-        createElement(
-          "div",
-          { className: "panel" },
-          createElement(
-            "ul",
-            { className: "queue" },
-            history.map((s) => songRow(s, false)),
-          ),
-          history.length
-            ? null
-            : createElement("div", { className: "empty" }, "기록이 없어요"),
+          "button",
+          {
+            className: "themebtn",
+            onClick: toggleTheme,
+            type: "button",
+            "aria-label": "테마 전환",
+          },
+          theme === "light" ? "🌙" : "☀️",
         ),
       ),
-      createElement(
-        "div",
-        null,
-        createElement("h2", null, "곡 추가 (제한 없음)"),
-        createElement(
+    ),
+    createElement(
+      "div",
+      { className: "tabbar" },
+      tabBtn("songs", "🎵 노래 관리"),
+      tabBtn("qr", "🔲 QR 관리"),
+    ),
+    activeTab === "songs"
+      ? createElement(
           "div",
-          { className: "panel" },
+          { className: "wrap" },
           createElement(
             "div",
-            { className: "field" },
-            createElement("input", {
-              id: "admin-search",
-              placeholder: "노래 / 가수 검색",
-              value: q,
-              onChange: (e) => setQ((e.target as HTMLInputElement).value),
-              onKeyDown: async (e) => {
-                if (e.key !== "Enter") return;
-                const r = await (
-                  await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`)
-                ).json();
-                setSearchResults(r.hits ?? []);
-              },
-            }),
-          ),
-          createElement(
-            "ul",
-            { className: "searchres" },
-            searchResults.map((h) =>
+            null,
+            createElement("h2", null, "지금 재생중"),
+            createElement(
+              "div",
+              { className: "panel" },
               createElement(
-                "li",
-                { key: h.trackId },
-                createElement("img", { src: art(h.artworkUrl), alt: "" }),
-                createElement(
-                  "div",
-                  { className: "info" },
-                  createElement("div", { className: "t" }, h.trackName),
-                  createElement("div", { className: "a" }, h.artistName),
-                ),
+                "div",
+                { className: "now" },
+                npSong
+                  ? [
+                      createElement("img", {
+                        src: art(npSong.artworkUrl),
+                        key: "art",
+                      }),
+                      createElement(
+                        "div",
+                        { key: "info" },
+                        createElement("div", { className: "label" }, "재생중"),
+                        createElement(
+                          "div",
+                          { className: "title" },
+                          npSong.trackName,
+                        ),
+                        createElement(
+                          "div",
+                          { className: "artist" },
+                          `${npSong.artistName} · ${npSong.requestedBy}`,
+                        ),
+                      ),
+                    ]
+                  : createElement(
+                      "div",
+                      { className: "empty" },
+                      "재생중인 곡이 없어요",
+                    ),
+              ),
+              np
+                ? createElement(
+                    "div",
+                    { className: "progress" },
+                    createElement("div", {
+                      className: "bar",
+                      style: { width: `${progressPct}%` },
+                    }),
+                  )
+                : null,
+              createElement(
+                "div",
+                { className: "skiprow" },
                 createElement(
                   "button",
                   {
+                    className: "btn danger",
+                    disabled: !np,
+                    onClick: () => act("/api/admin/skip"),
                     type: "button",
-                    className: "btn",
-                    onClick: () => act("/api/admin/add", h),
                   },
-                  "추가",
+                  "⏭ 스킵 (다음 곡으로)",
                 ),
+              ),
+            ),
+            createElement("h2", null, "대기열"),
+            createElement(
+              "div",
+              { className: "panel" },
+              createElement(
+                "ul",
+                { className: "queue" },
+                queue.map((s) => songRow(s, true)),
+              ),
+              queue.length
+                ? null
+                : createElement(
+                    "div",
+                    { className: "empty" },
+                    "대기열이 비었어요",
+                  ),
+            ),
+            createElement("h2", null, "최근 재생"),
+            createElement(
+              "div",
+              { className: "panel" },
+              createElement(
+                "ul",
+                { className: "queue" },
+                history.map((s) => songRow(s, false)),
+              ),
+              history.length
+                ? null
+                : createElement("div", { className: "empty" }, "기록이 없어요"),
+            ),
+          ),
+          createElement(
+            "div",
+            null,
+            createElement("h2", null, "곡 추가 (제한 없음)"),
+            createElement(
+              "div",
+              { className: "panel" },
+              createElement(
+                "div",
+                { className: "field" },
+                createElement("input", {
+                  id: "admin-search",
+                  placeholder: "노래 / 가수 검색",
+                  value: q,
+                  onChange: (e) => setQ((e.target as HTMLInputElement).value),
+                  onKeyDown: async (e) => {
+                    if (e.key !== "Enter") return;
+                    const r = await (
+                      await fetch(
+                        `/api/search?q=${encodeURIComponent(q.trim())}`,
+                      )
+                    ).json();
+                    setSearchResults(r.hits ?? []);
+                  },
+                }),
+              ),
+              createElement(
+                "ul",
+                { className: "searchres" },
+                searchResults.map((h) =>
+                  createElement(
+                    "li",
+                    { key: h.trackId },
+                    createElement("img", { src: art(h.artworkUrl), alt: "" }),
+                    createElement(
+                      "div",
+                      { className: "info" },
+                      createElement("div", { className: "t" }, h.trackName),
+                      createElement("div", { className: "a" }, h.artistName),
+                    ),
+                    createElement(
+                      "button",
+                      {
+                        className: "btn",
+                        type: "button",
+                        onClick: () => act("/api/admin/add", h),
+                      },
+                      "추가",
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            createElement("h2", null, "운영 설정"),
+            createElement(
+              "div",
+              { className: "panel" },
+              createElement(
+                "div",
+                { className: "settingrow" },
+                createElement("label", null, "곡 신청"),
+                createElement(
+                  "button",
+                  {
+                    className: paused ? "btn danger" : "btn okstate",
+                    type: "button",
+                    onClick: () =>
+                      act("/api/admin/settings", { requestsPaused: !paused }),
+                  },
+                  paused ? "일시중지 중" : "받는 중",
+                ),
+              ),
+              createElement(
+                "div",
+                { className: "settingrow" },
+                createElement("label", null, "공지"),
+                createElement("input", {
+                  id: "notice-input",
+                  placeholder: "손님 화면에 표시할 공지 (비우면 숨김)",
+                  maxLength: 200,
+                  value: noticeInput,
+                  onChange: (e) =>
+                    setNoticeInput((e.target as HTMLInputElement).value),
+                }),
+                createElement(
+                  "button",
+                  {
+                    className: "btn",
+                    type: "button",
+                    onClick: () =>
+                      act("/api/admin/settings", {
+                        notice: noticeInput.trim(),
+                      }),
+                  },
+                  "저장",
+                ),
+              ),
+              createElement(
+                "div",
+                { className: "note" },
+                "신청을 일시중지하면 손님 화면에 안내가 표시되고 신청이 차단돼요. 바텐더의 곡 추가는 언제나 가능해요.",
+              ),
+            ),
+          ),
+        )
+      : createElement(
+          "div",
+          { className: "qr-page" },
+          createElement("h2", null, "테이블 & QR"),
+          createElement(
+            "div",
+            { className: "panel" },
+            createElement(
+              "div",
+              { className: "field" },
+              createElement("input", {
+                id: "table-label",
+                placeholder: "테이블 이름 (예: 테이블 1)",
+                maxLength: 30,
+              }),
+              createElement(
+                "button",
+                {
+                  className: "btn",
+                  type: "button",
+                  onClick: async () => {
+                    const input = document.getElementById(
+                      "table-label",
+                    ) as HTMLInputElement;
+                    await api("/api/admin/tables", {
+                      method: "POST",
+                      body: JSON.stringify({ label: input.value.trim() }),
+                    });
+                    input.value = "";
+                    loadTables();
+                  },
+                },
+                "추가",
+              ),
+            ),
+            createElement("ul", { className: "tablelist" }, tableRows),
+            createElement(
+              "div",
+              {
+                className: "empty",
+                style: { display: tables.length ? "none" : "block" },
+              },
+              "테이블이 없어요 — 추가하고 QR을 인쇄하세요",
+            ),
+            createElement(
+              "div",
+              { style: { marginTop: "12px" } },
+              createElement(
+                "button",
+                {
+                  className: "btn ghost",
+                  type: "button",
+                  onClick: async () => {
+                    const cards: Array<{
+                      label: string;
+                      svg: string;
+                      url: string;
+                    }> = [];
+                    for (const t of tables) {
+                      const j = await (
+                        await api(`/api/admin/tables/${t.id}/qr`)
+                      ).json();
+                      cards.push({ label: t.label, svg: j.svg, url: j.url });
+                    }
+                    setPrintCards(cards);
+                  },
+                },
+                "🖨 테이블 QR 전체 인쇄",
               ),
             ),
           ),
         ),
-        createElement("h2", { style: { marginTop: "18px" } }, "테이블 & QR"),
-        createElement(
-          "div",
-          { className: "panel" },
-          createElement(
-            "div",
-            { className: "field" },
-            createElement("input", {
-              id: "table-label",
-              placeholder: "테이블 이름 (예: 테이블 1)",
-              maxLength: 30,
-            }),
-            createElement(
-              "button",
-              {
-                type: "button",
-                className: "btn",
-                onClick: async () => {
-                  const input = document.getElementById(
-                    "table-label",
-                  ) as HTMLInputElement;
-                  await api("/api/admin/tables", {
-                    method: "POST",
-                    body: JSON.stringify({ label: input.value.trim() }),
-                  });
-                  input.value = "";
-                  loadTables();
-                },
-              },
-              "추가",
-            ),
-          ),
-          createElement("ul", { className: "tablelist" }, tableRows),
-          createElement(
-            "div",
-            {
-              className: "empty",
-              style: { display: tables.length ? "none" : "block" },
-            },
-            "테이블이 없어요 — 추가하고 QR을 인쇄하세요",
-          ),
-          createElement(
-            "div",
-            { style: { marginTop: "12px" } },
-            createElement(
-              "button",
-              {
-                className: "btn ghost",
-                type: "button",
-                onClick: async () => {
-                  const cards: Array<{
-                    label: string;
-                    svg: string;
-                    url: string;
-                  }> = [];
-                  for (const t of tables) {
-                    const j = await (
-                      await api(`/api/admin/tables/${t.id}/qr`)
-                    ).json();
-                    cards.push({ label: t.label, svg: j.svg, url: j.url });
-                  }
-                  setPrintCards(cards);
-                },
-              },
-              "🖨 테이블 QR 전체 인쇄",
-            ),
-          ),
-        ),
-        createElement("h2", { style: { marginTop: "18px" } }, "운영 설정"),
-        createElement(
-          "div",
-          { className: "panel" },
-          createElement(
-            "div",
-            { className: "settingrow" },
-            createElement("label", null, "곡 신청"),
-            createElement(
-              "button",
-              {
-                className: paused ? "btn danger" : "btn okstate",
-                type: "button",
-                onClick: () =>
-                  act("/api/admin/settings", { requestsPaused: !paused }),
-              },
-              paused ? "일시중지 중" : "받는 중",
-            ),
-          ),
-          createElement(
-            "div",
-            { className: "settingrow" },
-            createElement("label", null, "공지"),
-            createElement("input", {
-              id: "notice-input",
-              placeholder: "손님 화면에 표시할 공지 (비우면 숨김)",
-              maxLength: 200,
-              value: noticeInput,
-              onChange: (e) =>
-                setNoticeInput((e.target as HTMLInputElement).value),
-            }),
-            createElement(
-              "button",
-              {
-                type: "button",
-                className: "btn",
-                onClick: () =>
-                  act("/api/admin/settings", { notice: noticeInput.trim() }),
-              },
-              "저장",
-            ),
-          ),
-          createElement(
-            "div",
-            { className: "note" },
-            "신청을 일시중지하면 손님 화면에 안내가 표시되고 신청이 차단돼요. 바텐더의 곡 추가는 언제나 가능해요.",
-          ),
-        ),
-      ),
-    ),
     printCards.length
       ? createElement(
           "div",
@@ -663,3 +725,6 @@ function AdminApp() {
       : null,
   );
 }
+
+const art = (u: string): string =>
+  u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;

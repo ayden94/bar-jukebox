@@ -3,6 +3,7 @@ import {
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { themeScript, useTheme } from "./theme";
 
 export type GuestDocumentProps = {
   readonly stylesheets: readonly string[];
@@ -95,6 +96,10 @@ export function GuestDocument({
           content: "yes",
         }),
         createElement("title", null, "바 주크박스"),
+        createElement("script", {
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: 저장된 테마를 첫 페인트 전에 적용하는 고정 스크립트
+          dangerouslySetInnerHTML: { __html: themeScript },
+        }),
         ...stylesheets.map((href) =>
           createElement("link", {
             "data-vite-style": true,
@@ -120,6 +125,7 @@ function GuestApp({
   error?: string;
   tableLabel?: string;
 }) {
+  const [theme, toggleTheme] = useTheme();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [results, setResults] = useState<SearchHit[]>([]);
   const [q, setQ] = useState("");
@@ -286,7 +292,21 @@ function GuestApp({
         createElement("span", { className: "note" }, "♪ "),
         "주크박스",
       ),
-      createElement("div", { className: "chip" }, tableLabel ?? ""),
+      createElement(
+        "div",
+        { className: "topright" },
+        createElement(
+          "button",
+          {
+            className: "themebtn",
+            onClick: toggleTheme,
+            type: "button",
+            "aria-label": "테마 전환",
+          },
+          theme === "light" ? "🌙" : "☀️",
+        ),
+        createElement("div", { className: "chip" }, tableLabel ?? ""),
+      ),
     ),
     paused
       ? createElement(
