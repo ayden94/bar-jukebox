@@ -46,6 +46,8 @@ type SearchHit = {
 const art = (u: string): string =>
   u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;
 
+const SEARCH_PAGE = 20;
+
 function fmt(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return "-:--";
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -136,6 +138,8 @@ function GuestApp({
     null,
   );
   const [myDevice, setMyDevice] = useState("");
+  const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE);
+  const moreRef = useRef<HTMLLIElement | null>(null);
   const searchTimer = useRef<number | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -186,6 +190,21 @@ function GuestApp({
       .catch(() => {});
   }, [error]);
 
+  // 검색 결과 무한 스크롤: 센티널이 화면 근처로 오면 다음 페이지 노출
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || visibleCount >= results.length) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting))
+          setVisibleCount((c) => c + SEARCH_PAGE);
+      },
+      { rootMargin: "400px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [results, visibleCount]);
+
   const doSearch = async (termArg?: string) => {
     const term = (termArg ?? q).trim();
     window.clearTimeout(searchTimer.current ?? undefined);
@@ -204,6 +223,7 @@ function GuestApp({
         return;
       }
       setResults(r.hits);
+      setVisibleCount(SEARCH_PAGE);
     } catch {
       showToast("검색 중 오류가 발생했어요", "err");
     } finally {
@@ -356,7 +376,7 @@ function GuestApp({
     createElement(
       "ul",
       { className: "results" },
-      results.map((h) =>
+      results.slice(0, visibleCount).map((h) =>
         createElement(
           "li",
           { key: h.trackId },
@@ -383,6 +403,13 @@ function GuestApp({
           ),
         ),
       ),
+      results.length > visibleCount
+        ? createElement(
+            "li",
+            { className: "more", key: "more", ref: moreRef },
+            "∨ 더 보기",
+          )
+        : null,
     ),
     np && npSong
       ? createElement(

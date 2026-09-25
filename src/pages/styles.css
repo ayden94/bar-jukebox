@@ -283,6 +283,15 @@ input::placeholder {
   text-overflow: ellipsis;
 }
 
+.results .more,
+.admin-root .searchres .more {
+  justify-content: center;
+  border-bottom: none;
+  padding: 12px 0;
+  font-size: 0.8rem;
+  color: var(--sub);
+}
+
 .req {
   background: var(--accent);
   color: #fff;

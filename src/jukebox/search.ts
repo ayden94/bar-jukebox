@@ -20,7 +20,7 @@ type RawSearchResult = {
 
 export async function searchMusic(
   term: string,
-  limit = 12,
+  limit = 200,
 ): Promise<SearchHit[]> {
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=${limit}`;
   const res = await fetch(url);
@@ -28,6 +28,7 @@ export async function searchMusic(
   const data = (await res.json()) as { results?: RawSearchResult[] };
 
   const hits: SearchHit[] = [];
+  const seenTrackIds = new Set<number>();
   for (const raw of data.results ?? []) {
     if (
       typeof raw.trackId !== "number" ||
@@ -39,6 +40,8 @@ export async function searchMusic(
     ) {
       continue;
     }
+    if (seenTrackIds.has(raw.trackId)) continue;
+    seenTrackIds.add(raw.trackId);
     hits.push({
       trackId: raw.trackId,
       trackName: raw.trackName,

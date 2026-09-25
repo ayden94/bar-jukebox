@@ -31,6 +31,8 @@ type Snapshot = {
 };
 
 type TableRow = { id: number; label: string; url: string };
+
+const SEARCH_PAGE = 20;
 type SearchHit = {
   trackId: number;
   trackName: string;
@@ -103,6 +105,8 @@ function AdminApp() {
   >({});
   const [qrOpenId, setQrOpenId] = useState<number | null>(null);
   const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
+  const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE);
+  const moreRef = useRef<HTMLLIElement | null>(null);
   const [q, setQ] = useState("");
   const [noticeInput, setNoticeInput] = useState("");
   const [paused, setPaused] = useState(false);
@@ -120,6 +124,21 @@ function AdminApp() {
       }),
     [token],
   );
+
+  // 검색 결과 무한 스크롤: 센티널이 보이면 다음 페이지 노출
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || visibleCount >= searchResults.length) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting))
+          setVisibleCount((c) => c + SEARCH_PAGE);
+      },
+      { rootMargin: "200px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [searchResults, visibleCount]);
 
   const refresh = useCallback(async () => {
     try {
@@ -542,13 +561,14 @@ function AdminApp() {
                       )
                     ).json();
                     setSearchResults(r.hits ?? []);
+                    setVisibleCount(SEARCH_PAGE);
                   },
                 }),
               ),
               createElement(
                 "ul",
                 { className: "searchres" },
-                searchResults.map((h) =>
+                searchResults.slice(0, visibleCount).map((h) =>
                   createElement(
                     "li",
                     { key: h.trackId },
@@ -570,6 +590,13 @@ function AdminApp() {
                     ),
                   ),
                 ),
+                searchResults.length > visibleCount
+                  ? createElement(
+                      "li",
+                      { className: "more", key: "more", ref: moreRef },
+                      "∨ 더 보기",
+                    )
+                  : null,
               ),
             ),
             createElement("h2", null, "운영 설정"),
