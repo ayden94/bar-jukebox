@@ -1,4 +1,3 @@
-import { createElement } from "react";
 import { hydrateRoot } from "react-dom/client";
 
 import { AdminDocument } from "./admin";
@@ -15,17 +14,17 @@ const dataset = document.documentElement.dataset;
 const page = dataset.page ?? "guest";
 
 if (page === "admin") {
-  hydrateRoot(document, createElement(AdminDocument, { stylesheets }), {
+  hydrateRoot(document, <AdminDocument stylesheets={stylesheets} />, {
     identifierPrefix: "jukebox-react-",
   });
 } else {
   hydrateRoot(
     document,
-    createElement(GuestDocument, {
-      error: dataset.error || undefined,
-      stylesheets,
-      tableLabel: dataset.tableLabel ?? "",
-    }),
+    <GuestDocument
+      error={dataset.error || undefined}
+      stylesheets={stylesheets}
+      tableLabel={dataset.tableLabel ?? ""}
+    />,
     { identifierPrefix: "jukebox-react-" },
   );
 }

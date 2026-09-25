@@ -9,7 +9,7 @@ export default defineConfig({
     outDir: "dist/client",
     rollupOptions: {
       input: {
-        "entry-client": fileURLToPath(new URL("./src/pages/entry-client.ts", import.meta.url)),
+        "entry-client": fileURLToPath(new URL("./src/pages/entry-client.tsx", import.meta.url)),
         "entry-server": fileURLToPath(new URL("./src/pages/entry-server.ts", import.meta.url)),
       },
       output: {

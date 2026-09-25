@@ -17,7 +17,6 @@ import {
 } from "@fluojs/react";
 import { createReactViteAssetManifest } from "@fluojs/react/vite";
 import { IsString } from "@fluojs/validation";
-import { createElement } from "react";
 
 import { AdminController } from "./controllers/admin.controller";
 import { AdminTokenGuard } from "./controllers/admin-token.guard";
@@ -83,18 +82,21 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       const tableId = Number(dto.t);
       const table = dto.t && dto.k ? this.jukeboxDb.getTable(tableId) : null;
       if (!table || table.secret !== dto.k) {
-        return createElement(GuestDocument, {
-          error: dto.t
-            ? "QR 코드가 유효하지 않아요. 직원에게 문의해주세요"
-            : "테이블 QR 코드로 접속해주세요",
-          stylesheets: assets.css,
-        });
+        return (
+          <GuestDocument
+            error={
+              dto.t
+                ? "QR 코드가 유효하지 않아요. 직원에게 문의해주세요"
+                : "테이블 QR 코드로 접속해주세요"
+            }
+            stylesheets={assets.css}
+          />
+        );
       }
       void this.jukeboxState;
-      return createElement(GuestDocument, {
-        stylesheets: assets.css,
-        tableLabel: table.label,
-      });
+      return (
+        <GuestDocument stylesheets={assets.css} tableLabel={table.label} />
+      );
     }
   }
 
@@ -102,7 +104,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   class AdminPageRouter {
     @Path("/")
     admin() {
-      return createElement(AdminDocument, { stylesheets: assets.css });
+      return <AdminDocument stylesheets={assets.css} />;
     }
   }
 

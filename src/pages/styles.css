@@ -1023,7 +1023,8 @@ input::placeholder {
   margin-bottom: 10px;
 }
 
-.admin-root .settingrow label {
+.admin-root .settingrow label,
+.admin-root .settingrow .rowname {
   font-size: 0.85rem;
   color: var(--sub);
   flex-shrink: 0;
