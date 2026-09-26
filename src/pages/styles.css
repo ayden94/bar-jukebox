@@ -767,7 +767,6 @@ input::placeholder {
 .guest .themesegbtn.active {
   background: var(--guest-surface);
   color: var(--guest-ink);
-  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.12);
 }
 
 .guest .banner {
@@ -978,9 +977,13 @@ input::placeholder {
     ),
     var(--guest-surface);
   color: var(--guest-ink);
-  box-shadow: 0 -24px 70px rgba(0, 0, 0, 0.24);
   overscroll-behavior: contain;
   transition: transform 480ms var(--guest-ease);
+}
+
+.guest .sheet.open {
+  /* 닫힌 시트의 그림자가 화면 하단에 비치지 않도록 열린 상태에서만 적용 */
+  box-shadow: 0 -24px 70px rgba(0, 0, 0, 0.24);
 }
 
 .guest .sheettop {
@@ -1149,6 +1152,12 @@ input::placeholder {
 .guest .sheetclose:active,
 .guest .cancelx:active {
   transform: scale(0.96);
+}
+
+@media (max-width: 640px) {
+  .guest .top {
+    padding-top: 44px;
+  }
 }
 
 @media (max-width: 420px) {
