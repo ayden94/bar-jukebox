@@ -5,7 +5,7 @@ import { SCHEMA_DDL } from "./schema";
 
 // libsql 클라이언트: file: URL은 프로세스 CWD 기준이라 서버는 repo 루트에서 실행한다.
 export const libsqlClient: Client = createClient({
-  url: "file:jukebox.sqlite",
+  url: process.env.DATABASE_URL ?? "file:jukebox.sqlite",
 });
 export const database = drizzle(libsqlClient);
 

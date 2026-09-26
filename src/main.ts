@@ -70,13 +70,19 @@ const PORT = Number(process.env.PORT ?? 5173);
 if (!process.env.DEVICE_COOKIE_SECRET && !process.env.ADMIN_TOKEN) {
   throw new Error("DEVICE_COOKIE_SECRET 또는 ADMIN_TOKEN이 필요해요");
 }
-
-const app = await FluoFactory.create(AppModule, {
-  adapter: BunHttpApplicationAdapter.create({ port: PORT, idleTimeout: 255 }),
+const adapter = BunHttpApplicationAdapter.create({
+  port: PORT,
+  idleTimeout: 255,
 });
+const app = await FluoFactory.create(AppModule, { adapter });
 
 await app.listen();
 
-playbackService
-  .start()
-  .catch((e) => console.error("playback loop crashed:", e));
+console.log(`JUKEBOX_READY ${adapter.getServer()?.port}`);
+if (process.env.PLAYBACK_DISABLED !== "1") {
+  playbackService.start().catch((e) => {
+    console.error("playback loop crashed:", e);
+    process.exitCode = 1;
+    void app.close();
+  });
+}
