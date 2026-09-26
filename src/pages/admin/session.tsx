@@ -1,17 +1,56 @@
-import { useCallback, useEffect, useState } from "react";
+import { Link } from "@fluojs/react/client";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { useJukeboxSnapshot } from "../hooks";
 import { useTheme } from "../theme";
 import { ThemeSegment } from "../theme-segment";
+import type { Snapshot } from "../types";
 import { AuthGate } from "./auth-gate";
-import { QrTab } from "./qr-tab";
-import { SongsTab } from "./songs-tab";
 
-export function AdminApp() {
+export type AdminTabId = "songs" | "qr";
+
+type AdminSessionValue = {
+  readonly act: (
+    path: string,
+    body?: unknown,
+    method?: string,
+  ) => Promise<void>;
+  readonly api: (path: string, opts?: RequestInit) => Promise<Response>;
+  readonly snap: Snapshot | null;
+};
+
+const AdminSessionContext = createContext<AdminSessionValue | null>(null);
+
+export function useAdminSession(): AdminSessionValue {
+  const value = useContext(AdminSessionContext);
+  if (value === null) {
+    throw new Error("AdminSession 안에서만 useAdminSession을 쓸 수 있어요");
+  }
+  return value;
+}
+
+const TABS: ReadonlyArray<{ href: string; id: AdminTabId; label: string }> = [
+  { href: "/admin/songs", id: "songs", label: "🎵 노래 관리" },
+  { href: "/admin/qr", id: "qr", label: "🔲 QR 관리" },
+];
+
+export function AdminSession({
+  active,
+  children,
+}: {
+  active: AdminTabId;
+  children: ReactNode;
+}) {
   const [theme, setTheme] = useTheme();
   const [token, setToken] = useState("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
-  const [activeTab, setActiveTab] = useState<"songs" | "qr">("songs");
   const { snap, refresh } = useJukeboxSnapshot(authed);
 
   const api = useCallback(
@@ -41,12 +80,11 @@ export function AdminApp() {
     );
   }, []);
 
+  // 해시(#qr) 시절 북마크를 실제 라우트로 넘긴다.
   useEffect(() => {
-    const sync = () =>
-      setActiveTab(window.location.hash === "#qr" ? "qr" : "songs");
-    sync();
-    window.addEventListener("hashchange", sync);
-    return () => window.removeEventListener("hashchange", sync);
+    if (window.location.hash === "#qr") {
+      window.location.replace("/admin/qr");
+    }
   }, []);
 
   const login = async () => {
@@ -70,48 +108,39 @@ export function AdminApp() {
     refresh();
   };
 
-  const switchTab = (t: "songs" | "qr") => {
-    window.location.hash = t === "qr" ? "#qr" : "#songs";
-    setActiveTab(t);
-  };
-
   if (!authed) {
     return (
       <AuthGate
-        tokenInput={tokenInput}
-        onTokenInput={setTokenInput}
         onLogin={login}
+        onTokenInput={setTokenInput}
+        tokenInput={tokenInput}
       />
     );
   }
-
-  const tabBtn = (id: "songs" | "qr", label: string) => (
-    <button
-      className={`tab${activeTab === id ? " active" : ""}`}
-      type="button"
-      onClick={() => switchTab(id)}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <div className="admin-root">
       <div className="topbar">
         <h1>주크박스 관리</h1>
         <div className="topright">
-          <ThemeSegment theme={theme} onSelect={setTheme} />
+          <ThemeSegment onSelect={setTheme} theme={theme} />
         </div>
       </div>
       <div className="tabbar">
-        {tabBtn("songs", "🎵 노래 관리")}
-        {tabBtn("qr", "🔲 QR 관리")}
+        {TABS.map((tab) => (
+          <Link
+            aria-current={active === tab.id ? "page" : undefined}
+            className={`tab${active === tab.id ? " active" : ""}`}
+            href={tab.href}
+            key={tab.id}
+          >
+            {tab.label}
+          </Link>
+        ))}
       </div>
-      {activeTab === "songs" ? (
-        <SongsTab snap={snap} act={act} />
-      ) : (
-        <QrTab api={api} />
-      )}
+      <AdminSessionContext.Provider value={{ act, api, snap }}>
+        {children}
+      </AdminSessionContext.Provider>
     </div>
   );
 }

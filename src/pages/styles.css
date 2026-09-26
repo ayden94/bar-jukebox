@@ -1248,6 +1248,7 @@ input::placeholder {
   font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .admin-root .tabbar .tab.active {

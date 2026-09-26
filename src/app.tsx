@@ -6,6 +6,7 @@ import {
   FromPath,
   Get,
   NotFoundException,
+  Redirect,
   type RequestContext,
   RequestDto,
 } from "@fluojs/http";
@@ -38,7 +39,7 @@ import {
   DeviceCookieMiddleware,
   deviceIdOf,
 } from "./middleware/device-cookie.middleware";
-import { AdminDocument } from "./pages/admin";
+import { AdminQrDocument, AdminSongsDocument } from "./pages/admin";
 import { GuestDocument } from "./pages/guest";
 
 type JukeboxDrizzleTxOptions = NonNullable<
@@ -111,10 +112,23 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
 
   @Router("/admin")
   class AdminPageRouter {
+    // 예전 단일 경로(/admin)는 노래 관리로 보낸다 — 해시 시절 북마크는 클라이언트가 이어받는다.
     @Path("/")
+    @Redirect("/admin/songs")
+    admin() {
+      return null;
+    }
+
+    @Path("/songs")
     @RequestDto(AdminPageDto)
-    admin(dto: AdminPageDto) {
-      return <AdminDocument stylesheets={assets.css} theme={dto.theme} />;
+    songs(dto: AdminPageDto) {
+      return <AdminSongsDocument stylesheets={assets.css} theme={dto.theme} />;
+    }
+
+    @Path("/qr")
+    @RequestDto(AdminPageDto)
+    qr(dto: AdminPageDto) {
+      return <AdminQrDocument stylesheets={assets.css} theme={dto.theme} />;
     }
   }
 

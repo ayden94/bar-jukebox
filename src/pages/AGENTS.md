@@ -10,9 +10,9 @@ Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydratio
 | Toast / infinite scroll | hooks.ts | useToast, useInfiniteScroll |
 | Theme (light/dark/system) | theme.ts + theme-segment.tsx | 쿠키 bj_theme 3-상태(구 localStorage 자동 마이그레이션); 인라인 스크립트가 system을 matchMedia로 해석 — data-theme은 항상 구체값; UI는 게스트/관리자 공통 세그먼트 컨트롤 |
 | Guest flow | guest/guest-app.tsx | search → request → mini-player → full sheet → queue (cancel own) |
-| Admin flow | admin/admin-app.tsx | AuthGate → SongsTab / QrTab (hash routing #songs/#qr) |
+| Admin flow | admin/songs-page.tsx · admin/qr-page.tsx | Per-route page documents sharing admin/session.tsx (AuthGate → chrome → SongsTab / QrTab) |
 | Shared view types | types.ts | SongView/Snapshot mirror jukebox/types minus server-only fields |
-| Build entries | entry-client.tsx, entry-server.ts | client picks page via data-page; server re-exports the two Documents |
+| Build entries | entry-client.tsx, entry-server.ts | client picks page via data-page; server re-exports the page documents |
 | Styling | styles.css (+ styles.d.ts shim) | single stylesheet, plain classes, dark/light via data-theme |
 
 ## CONVENTIONS (different from parent)

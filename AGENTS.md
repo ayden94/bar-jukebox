@@ -70,7 +70,7 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 ## UNIQUE STYLES
 - Playback hack: Music.app ignores the `?i=` selector on music:// URLs, so playSong mutes the volume, opens the whole album, `next track`-skips to the target trackNumber, then restores volume; waitForTrackEnd watches the current track id to cut off album auto-advance.
 - Page selection over SSR + hydration via `<html data-page>` dataset; hydration options from createReactViteAssetManifest.
-- Admin tabs switch via location.hash (#songs/#qr); admin token cached in localStorage (bj_admin), sent as x-admin-token.
+- Admin is split into per-route page documents (AdminSongsDocument / AdminQrDocument; entry-client picks by data-page; /admin 302 → /admin/songs); admin token cached in localStorage (bj_admin), sent as x-admin-token.
 
 ## COMMANDS
 ```bash

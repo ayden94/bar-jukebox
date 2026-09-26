@@ -1,6 +1,6 @@
 import { hydrateRoot } from "react-dom/client";
 
-import { AdminDocument } from "./admin";
+import { AdminQrDocument, AdminSongsDocument } from "./admin";
 import { GuestDocument } from "./guest";
 import "./styles.css";
 
@@ -13,8 +13,12 @@ const stylesheets = [
 const dataset = document.documentElement.dataset;
 const page = dataset.page ?? "guest";
 
-if (page === "admin") {
-  hydrateRoot(document, <AdminDocument stylesheets={stylesheets} />, {
+if (page === "admin-songs") {
+  hydrateRoot(document, <AdminSongsDocument stylesheets={stylesheets} />, {
+    identifierPrefix: "jukebox-react-",
+  });
+} else if (page === "admin-qr") {
+  hydrateRoot(document, <AdminQrDocument stylesheets={stylesheets} />, {
     identifierPrefix: "jukebox-react-",
   });
 } else {
