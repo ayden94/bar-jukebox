@@ -76,13 +76,15 @@ bun start
 
 - 🎛️ 바텐더: `http://localhost:5173/admin` (노래 관리 `/admin/songs` · QR 관리 `/admin/qr`) — 비밀번호는 `.env`의 `ADMIN_TOKEN`
 - 📱 손님: 어드민에서 만든 테이블 QR 스캔 (같은 Wi-Fi)
-- 🧪 API 플로우 점검: `ADMIN_TOKEN=<토큰> bun test-flow.ts`
+- 🧪 격리 API 플로우 점검: `bun run build && bun test-flow.ts`
 
 ## ⚙️ .env
 
 ```bash
 ADMIN_TOKEN=긴-랜덤-문자열
 PORT=5173
+# 기기 쿠키 서명 키 (미설정 시 ADMIN_TOKEN 사용)
+# DEVICE_COOKIE_SECRET=별도의-긴-랜덤-문자열
 
 # QR에 인쇄될 공개 주소 (미설정 시 LAN IP 자동 감지)
 # BASE_URL=http://barjukebox.local:5173
@@ -90,6 +92,12 @@ PORT=5173
 
 > **QR은 한 번 인쇄하면 유지**돼요. 서버 주소가 바뀌면 재인쇄가 필요하니 `BASE_URL`로
 > 고정 호스트명(mDNS 등)을 쓰는 걸 권장해요.
+
+기기 쿠키는 서명을 검증하고, 공개 상태에는 기기 ID 대신 `isMine`만 내려줘요.
+기존 미서명 쿠키는 새 기기로 교체되므로 업데이트 전에 남은 손님 신청을 비우거나
+직원이 관리해주세요. 서명 키를 바꾸면 기존 기기 쿠키도 무효가 돼요.
+곡 신청과 직원 추가는 `trackId`만 받고 서버가 iTunes에서 재생 정보를 조회해요.
+큐·재생중·완료 전환과 설정은 DB 저장에 성공한 뒤 화면에 반영해요.
 
 ## 🗂 프로젝트 구조
 
@@ -110,8 +118,14 @@ src/
 bun test               # 단위 테스트 (큐 규칙 · 저장소 round-trip · 재생)
 bun run typecheck      # TypeScript strict
 bun run check          # Biome lint + format
+bun run build && bun test-flow.ts # 임시 DB·임시 서버·고정 검색 데이터로 HTTP 회귀 검증
 bun run dev            # 개발 서버 (fluo dev)
 ```
+
+플로우 검증은 운영 토큰이나 실행 중인 서버를 사용하지 않고, 실패하면 비정상 종료해요.
+실제 Music.app은 실행하지 않아요. 별도 수동 검증 서버가 필요하면
+`DATABASE_URL=:memory: PLAYBACK_DISABLED=1`로 실행할 수 있어요.
+운영에서는 `PLAYBACK_DISABLED`를 설정하지 마세요.
 
 ## 📚 문서
 

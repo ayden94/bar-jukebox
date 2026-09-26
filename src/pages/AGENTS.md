@@ -6,7 +6,7 @@ Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydratio
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Live state (SSE + polling fallback) | hooks.ts useJukeboxSnapshot | EventSource /api/events; 3s polling after SSE error |
+| Live state (SSE + polling fallback) | hooks.ts useJukeboxSnapshot | EventSource 자동 재연결; 끊긴 동안만 3s 폴링, 복구 시 중단 |
 | Toast / infinite scroll | hooks.ts | useToast, useInfiniteScroll |
 | Theme (light/dark/system) | theme.ts + theme-segment.tsx | 쿠키 bj_theme 3-상태(구 localStorage 자동 마이그레이션); 인라인 스크립트가 system을 matchMedia로 해석 — data-theme은 항상 구체값; UI는 게스트/관리자 공통 세그먼트 컨트롤 |
 | Guest flow | guest/guest-app.tsx | search → request → mini-player → full sheet → queue (cancel own) |
@@ -20,6 +20,8 @@ Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydratio
 - All mutations POST then refresh() the snapshot; components render purely from `snap`.
 - Artwork always through the art() helper in shared.ts (/api/artwork?u=…), never raw mzstatic URLs.
 - Admin requests carry the x-admin-token header (token cached in localStorage bj_admin); guest requests rely on the bj_did cookie only.
+- 공개 곡의 isMine으로 본인 신청을 구분한다. deviceId나 쿠키 서명은 응답에서 읽지 않는다.
+- API 오류는 shared.ts의 apiErrorMessage로 구조화된 error.message를 추출한다. 검색은 이전 요청을 취소하고 최신 응답만 반영한다.
 - No CSS framework: one styles.css (~19KB) with plain classes; styles.d.ts shim allows `import "./styles.css"`.
 - Keep identifierPrefix "jukebox-react-" in sync between app.tsx (manifest) and entry-client.tsx (hydrateRoot).
 
