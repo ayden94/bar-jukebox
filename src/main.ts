@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
 import { FluoFactory } from "@fluojs/runtime";
@@ -16,14 +17,37 @@ onChange((event) => {
   if (event === "mutate") db.saveSnapshot(state.snapshot());
 });
 
-const manifest: unknown = JSON.parse(
-  await readFile(
+async function loadClientManifest(): Promise<unknown> {
+  const candidates = [
     new URL("../client/.vite/manifest.json", import.meta.url),
-    "utf8",
-  ),
-);
+    new URL("../dist/client/.vite/manifest.json", import.meta.url),
+  ];
+  for (const url of candidates) {
+    try {
+      return JSON.parse(await readFile(url, "utf8"));
+    } catch {}
+  }
+  throw new Error(
+    "client manifest not found — run the vite client build first",
+  );
+}
+
+const manifest: unknown = await loadClientManifest();
+
+function resolveClientDirectory(): URL {
+  for (const url of [
+    new URL("../client/", import.meta.url),
+    new URL("../dist/client/", import.meta.url),
+  ]) {
+    if (existsSync(url)) return url;
+  }
+  throw new Error(
+    "client assets directory not found — run the vite client build first",
+  );
+}
+
 const AppModule = createJukeboxModule({
-  clientDirectory: new URL("../client/", import.meta.url),
+  clientDirectory: resolveClientDirectory(),
   manifest,
 });
 
@@ -34,6 +58,5 @@ const app = await FluoFactory.create(AppModule, {
 });
 
 await app.listen();
-console.log(`jukebox (fluo) listening on http://localhost:${PORT}`);
 
 startPlaybackLoop().catch((e) => console.error("playback loop crashed:", e));
