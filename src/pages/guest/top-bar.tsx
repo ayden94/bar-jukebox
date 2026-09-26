@@ -1,5 +1,4 @@
 import type { ThemePreference } from "../theme";
-import { ThemeSegment } from "../theme-segment";
 
 type TopBarProps = {
   theme: ThemePreference;
@@ -14,7 +13,21 @@ export function TopBar({ theme, onThemeSelect, tableLabel }: TopBarProps) {
         <span className="note">{"♪ "}</span>주크박스
       </div>
       <div className="topright">
-        <ThemeSegment theme={theme} onSelect={onThemeSelect} />
+        <select
+          className="themechoice"
+          aria-label="테마 선택"
+          value={theme}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            if (value === "system" || value === "light" || value === "dark") {
+              onThemeSelect(value);
+            }
+          }}
+        >
+          <option value="system">시스템</option>
+          <option value="light">밝게</option>
+          <option value="dark">어둡게</option>
+        </select>
         <div className="chip">{tableLabel ?? ""}</div>
       </div>
     </header>

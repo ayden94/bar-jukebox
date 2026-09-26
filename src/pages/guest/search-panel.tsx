@@ -108,9 +108,7 @@ export function SearchPanel({
   return (
     <>
       <div className="searchintro">
-        <span className="eyebrow">오늘의 선곡</span>
         <h1>듣고 싶은 곡을 신청해요</h1>
-        <p>노래나 가수를 찾아 신청해보세요</p>
       </div>
       <div className="searchwrap">
         <div className="field">

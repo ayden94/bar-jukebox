@@ -71,9 +71,7 @@ export function GuestApp({
       {snap?.notice ? <div className="banner notice">{snap.notice}</div> : null}
       <SearchPanel
         blocked={paused || atLimit}
-        hint={
-          <Hint paused={paused} atLimit={atLimit} hasQueue={queue.length > 0} />
-        }
+        hint={<Hint paused={paused} atLimit={atLimit} />}
         onRequested={refresh}
         showToast={showToast}
       />
