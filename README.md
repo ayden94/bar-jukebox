@@ -29,6 +29,8 @@
 
 바의 Mac에서 (Apple Music 구독 계정으로 Music.app 로그인 상태):
 
+> **⚠️ 한 번만 해둘 설정**: Music.app → 설정 → 재생에서 **자동 재생(비슷한 노래 이어 재생)을 꺼주세요.** 켜져 있으면 요청 곡이 끝난 뒤 추천 곡이 대기열에 이어서 쌓입니다. 이 설정은 AppleScript로 바꿀 수 없어 수동으로 꺼야 합니다.
+
 ```bash
 cd bar-jukebox
 bun install
