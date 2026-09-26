@@ -5,11 +5,13 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpException,
   Post,
   type RequestContext,
   RequestDto,
 } from "@fluojs/http";
 import { deviceIdOf } from "../../middleware/device-cookie.middleware";
+import { SearchService, SongLookupError } from "../search/search.service";
 import { SettingsService } from "../settings/settings.service";
 import { makeSong } from "../shared/song";
 import { composeState, publicSong } from "../shared/state-view";
@@ -19,13 +21,14 @@ import { QueueService } from "./queue.service";
 
 class StateDto {}
 
-@Inject(QueueService, TableService, SettingsService)
+@Inject(QueueService, TableService, SettingsService, SearchService)
 @Controller()
 export class QueueController {
   constructor(
     private readonly queue: QueueService,
     private readonly tableService: TableService,
     private readonly settings: SettingsService,
+    private readonly search: SearchService,
   ) {}
 
   @Get("/api/state")
@@ -52,7 +55,11 @@ export class QueueController {
       );
     }
 
-    const song = makeSong(dto, table.label, deviceId, false, dto.tableId);
+    const hit = await lookupSong(this.search, dto.trackId);
+    if (this.settings.isRequestsPaused()) {
+      throw new ForbiddenException("지금은 곡 신청을 받고 있지 않아요");
+    }
+    const song = makeSong(hit, table.label, deviceId, false, dto.tableId);
     const limits = this.settings.read();
     const denied = await this.queue.enqueue(song, {
       maxPerDevice: limits.maxPerDevice,
@@ -89,5 +96,20 @@ export class QueueController {
       deviceIdOf(context),
     );
     return { ok: removed };
+  }
+}
+
+export async function lookupSong(search: SearchService, trackId: number) {
+  try {
+    return await search.lookup(trackId);
+  } catch (error) {
+    if (!(error instanceof SongLookupError)) throw error;
+    if (error.code === "upstream-unavailable") {
+      throw new HttpException(
+        503,
+        "곡 정보를 불러올 수 없어요. 다시 시도해주세요",
+      );
+    }
+    throw new BadRequestException("재생할 수 있는 곡을 선택해주세요");
   }
 }

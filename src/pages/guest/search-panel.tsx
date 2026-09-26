@@ -75,7 +75,7 @@ export function SearchPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...hit,
+          trackId: hit.trackId,
           tableId: Number(params.get("t")),
           tableSecret: params.get("k") ?? "",
         }),

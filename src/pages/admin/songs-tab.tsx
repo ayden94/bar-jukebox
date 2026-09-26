@@ -36,7 +36,9 @@ export function SongsTab({ snap, act }: SongsTabProps) {
       </div>
       <div>
         <h2>곡 추가 (제한 없음)</h2>
-        <AddSong onAdd={(hit) => act("/api/admin/add", hit)} />
+        <AddSong
+          onAdd={(hit) => act("/api/admin/add", { trackId: hit.trackId })}
+        />
         <h2>운영 설정</h2>
         <SettingsPanel
           requestsPaused={snap?.requestsPaused ?? false}

@@ -11,7 +11,9 @@ import {
 import QRCode from "qrcode";
 import { PlaybackService } from "../playback/playback.service";
 import { CancelDto, ReorderDto, SongInputDto } from "../queue/dto";
+import { lookupSong } from "../queue/queue.controller";
 import { QueueService } from "../queue/queue.service";
+import { SearchService } from "../search/search.service";
 import { SettingsDto } from "../settings/dto";
 import {
   InvalidSettingsError,
@@ -24,7 +26,13 @@ import { TableIdDto, TableLabelDto } from "../table/dto";
 import { TableService } from "../table/table.service";
 import { AdminTokenGuard } from "./admin-token.guard";
 
-@Inject(TableService, QueueService, SettingsService, PlaybackService)
+@Inject(
+  TableService,
+  QueueService,
+  SettingsService,
+  PlaybackService,
+  SearchService,
+)
 @UseGuards(AdminTokenGuard)
 @Controller("/api/admin")
 export class AdminController {
@@ -33,6 +41,7 @@ export class AdminController {
     private readonly queue: QueueService,
     private readonly settingsService: SettingsService,
     private readonly playback: PlaybackService,
+    private readonly search: SearchService,
   ) {}
 
   @Post("/skip")
@@ -52,7 +61,13 @@ export class AdminController {
   @Post("/add")
   @RequestDto(SongInputDto)
   async add(dto: SongInputDto) {
-    const song = makeSong(dto, "바텐더", null, true, null);
+    const song = makeSong(
+      await lookupSong(this.search, dto.trackId),
+      "바텐더",
+      null,
+      true,
+      null,
+    );
     await this.queue.enqueue(song);
     console.log(`+ staff add: ${song.trackName} — ${song.artistName}`);
     return { ok: true, song: publicSong(song, "") };
@@ -61,7 +76,10 @@ export class AdminController {
   @Post("/reorder")
   @RequestDto(ReorderDto)
   async reorder(dto: ReorderDto) {
-    if (!Array.isArray(dto?.ids)) {
+    if (
+      !Array.isArray(dto?.ids) ||
+      !dto.ids.every((id) => typeof id === "string")
+    ) {
       throw new BadRequestException("ids 배열이 필요해요");
     }
     await this.queue.reorder(dto.ids);
