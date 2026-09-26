@@ -923,25 +923,23 @@ input::placeholder {
   background: var(--guest-accent);
 }
 
-.guest .sheetbackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 29;
+.guest .sheet::backdrop {
   background: rgba(8, 8, 12, 0.66);
   opacity: 0;
-  pointer-events: none;
+  touch-action: none;
   transition: opacity 360ms ease;
 }
 
-.guest .sheetbackdrop.open {
+.guest .sheet.open::backdrop {
   opacity: 1;
-  pointer-events: auto;
 }
 .guest .sheet {
   inset: auto 0 0;
   width: 100%;
   height: min(94dvh, 920px);
+  max-height: none;
   max-width: 640px;
+  border: 0;
   padding: 0 24px calc(30px + env(safe-area-inset-bottom));
   border-radius: 28px 28px 0 0;
   background: var(--guest-surface);
@@ -949,6 +947,19 @@ input::placeholder {
   color: var(--guest-ink);
   overscroll-behavior: contain;
   transition: transform 480ms var(--guest-ease);
+}
+
+.guest .sheet.dragging {
+  transition: none;
+}
+
+@starting-style {
+  .guest .sheet.open {
+    transform: translateY(100%);
+  }
+  .guest .sheet.open::backdrop {
+    opacity: 0;
+  }
 }
 
 .guest .sheettop {
@@ -972,19 +983,25 @@ input::placeholder {
   opacity: 0.55;
 }
 
-.guest .sheetclose {
-  position: absolute;
-  right: 24px;
-  top: 9px;
-  min-width: 52px;
+.guest .sheethandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
   min-height: 44px;
+  padding: 0;
   border: 0;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--guest-ink) 8%, transparent);
-  color: var(--guest-ink);
-  font-size: 0.84rem;
-  font-weight: 700;
-  cursor: pointer;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+}
+
+.guest .sheethandle:active {
+  cursor: grabbing;
 }
 
 .guest .bigart {
@@ -1106,7 +1123,7 @@ input::placeholder {
   .guest .req:not(:disabled):hover {
     filter: brightness(1.12);
   }
-  .guest .sheetclose:hover,
+  .guest .sheethandle:hover,
   .guest .cancelx:hover {
     filter: brightness(1.15);
   }
@@ -1114,7 +1131,6 @@ input::placeholder {
 
 .guest .gobtn:not(:disabled):active,
 .guest .req:not(:disabled):active,
-.guest .sheetclose:active,
 .guest .cancelx:active {
   transform: scale(0.96);
 }
@@ -1147,9 +1163,6 @@ input::placeholder {
     margin-inline: -18px;
     padding-inline: 18px;
   }
-  .guest .sheetclose {
-    right: 18px;
-  }
   .guest .mini {
     width: calc(100% - 32px);
   }
@@ -1162,7 +1175,7 @@ input::placeholder {
   .guest .sheet {
     transition-duration: 1ms;
   }
-  .guest .sheetbackdrop {
+  .guest .sheet::backdrop {
     transition-duration: 1ms;
   }
   .guest button {

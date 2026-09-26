@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { art, fmt } from "../shared";
 import type { NowPlayingView, SongView } from "../types";
+import { PlaybackSheet } from "./playback-sheet";
 
 type NowPlayingAreaProps = {
   np: NowPlayingView | null;
@@ -38,32 +39,7 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
           </div>
         </button>
       ) : null}
-      <div
-        className={`sheetbackdrop${sheetOpen ? " open" : ""}`}
-        aria-hidden="true"
-        onClick={() => setSheetOpen(false)}
-      />
-      <section
-        className={`sheet${sheetOpen ? " open" : ""}`}
-        role="dialog"
-        aria-modal={sheetOpen}
-        aria-label="재생 화면"
-        inert={!sheetOpen}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setSheetOpen(false);
-        }}
-      >
-        <div className="sheettop">
-          <span className="sheetgrab" aria-hidden="true" />
-          <button
-            type="button"
-            className="sheetclose"
-            onClick={() => setSheetOpen(false)}
-            aria-label="재생 화면 닫기"
-          >
-            닫기
-          </button>
-        </div>
+      <PlaybackSheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
         {np && npSong ? (
           <div>
             <div className="nphead">
@@ -134,7 +110,7 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
             </div>
           )
         ) : null}
-      </section>
+      </PlaybackSheet>
     </>
   );
 }
