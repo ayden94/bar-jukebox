@@ -22,14 +22,13 @@ export function SearchPanel({
   const [searching, setSearching] = useState(false);
   const [searchedTerm, setSearchedTerm] = useState("");
   const [requestedTrack, setRequestedTrack] = useState<string | null>(null);
-  const searchTimer = useRef<number | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
   const searchVersion = useRef(0);
+  const canSearch = !searching && q.trim() !== "" && q.trim() !== searchedTerm;
   useEffect(
     () => () => {
       ++searchVersion.current;
       searchAbort.current?.abort();
-      window.clearTimeout(searchTimer.current ?? undefined);
     },
     [],
   );
@@ -40,17 +39,11 @@ export function SearchPanel({
     "400px 0px",
   );
 
-  const doSearch = async (termArg?: string) => {
-    const term = (termArg ?? q).trim();
-    window.clearTimeout(searchTimer.current ?? undefined);
+  const doSearch = async () => {
+    if (!canSearch) return;
+    const term = q.trim();
     searchAbort.current?.abort();
     const version = ++searchVersion.current;
-    if (!term) {
-      setResults([]);
-      setSearching(false);
-      setSearchedTerm("");
-      return;
-    }
     const controller = new AbortController();
     searchAbort.current = controller;
     setSearching(true);
@@ -79,19 +72,6 @@ export function SearchPanel({
       }
     } finally {
       if (version === searchVersion.current) setSearching(false);
-    }
-  };
-
-  const onSearchInput = (value: string) => {
-    setQ(value);
-    setSearchedTerm("");
-    setSearching(false);
-    setResults([]);
-    ++searchVersion.current;
-    searchAbort.current?.abort();
-    window.clearTimeout(searchTimer.current ?? undefined);
-    if (value.trim()) {
-      searchTimer.current = window.setTimeout(() => doSearch(value), 450);
     }
   };
 
@@ -142,9 +122,7 @@ export function SearchPanel({
             enterKeyHint="search"
             autoComplete="off"
             value={q}
-            onChange={(e) =>
-              onSearchInput((e.target as HTMLInputElement).value)
-            }
+            onChange={(e) => setQ(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") doSearch();
             }}
@@ -153,7 +131,7 @@ export function SearchPanel({
             type="button"
             className="gobtn"
             onClick={() => doSearch()}
-            disabled={searching}
+            disabled={!canSearch}
           >
             {searching ? "검색 중" : "검색"}
           </button>
