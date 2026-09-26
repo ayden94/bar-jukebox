@@ -5,16 +5,10 @@ import type { NowPlayingView, SongView } from "../types";
 type NowPlayingAreaProps = {
   np: NowPlayingView | null;
   queue: SongView[];
-  myDevice: string;
   onCancel: (id: string) => void;
 };
 
-export function NowPlayingArea({
-  np,
-  queue,
-  myDevice,
-  onCancel,
-}: NowPlayingAreaProps) {
+export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const npSong = np?.song ?? null;
@@ -33,7 +27,9 @@ export function NowPlayingArea({
           <img src={art(npSong.artworkUrl)} alt="" />
           <div className="mi">
             <div className="mt">{npSong.trackName}</div>
-            <div className="ma">{`${npSong.artistName} · ${npSong.requestedBy}`}</div>
+            <div className="ma">
+              {`${npSong.artistName} · ${npSong.requestedBy}`}
+            </div>
           </div>
           <div className="eq">
             <i />
@@ -106,14 +102,16 @@ export function NowPlayingArea({
           queue.length ? (
             <ul className="qlist show">
               {queue.map((s, i) => {
-                const my = s.deviceId === myDevice;
+                const my = s.isMine;
                 return (
                   <li key={s.id} className={my ? "mine" : ""}>
                     <span className="idx">{String(i + 1)}</span>
                     <img src={art(s.artworkUrl)} alt="" />
                     <div className="info">
                       <div className="t">{s.trackName}</div>
-                      <div className="a">{`${s.artistName} · ${s.requestedBy}`}</div>
+                      <div className="a">
+                        {`${s.artistName} · ${s.requestedBy}`}
+                      </div>
                     </div>
                     {my ? <span className="minebadge">내 신청</span> : null}
                     {my ? (

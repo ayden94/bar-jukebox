@@ -2,9 +2,11 @@ import { Inject } from "@fluojs/core";
 import {
   Controller,
   type RequestContext,
+  RequestDto,
   Sse,
   type SseMessage,
 } from "@fluojs/http";
+import { deviceIdOf } from "../../middleware/device-cookie.middleware";
 import type { JukeboxBus } from "../providers";
 import { JukeboxBusToken } from "../providers";
 import { QueueService } from "../queue/queue.service";
@@ -12,7 +14,7 @@ import { SettingsService } from "../settings/settings.service";
 import { composeState } from "../shared/state-view";
 import { SseBroker } from "./sse-broker";
 
-const PING_INTERVAL_MS = 25000;
+class EventsDto {}
 
 @Inject(QueueService, SettingsService, SseBroker, JukeboxBusToken)
 @Controller()
@@ -28,22 +30,27 @@ export class EventsController {
   }
 
   @Sse("/api/events")
-  async *events(context: RequestContext): AsyncIterable<SseMessage<unknown>> {
-    void context;
-    yield { event: "state", data: composeState(this.queue, this.settings) };
-    while (true) {
-      const result = await Promise.race([
-        this.broker.waitChange(),
-        new Promise<"ping">((resolve) =>
-          setTimeout(resolve, PING_INTERVAL_MS, "ping"),
-        ),
-      ]);
+  @RequestDto(EventsDto)
+  async *events(
+    _dto: EventsDto,
+    context: RequestContext,
+  ): AsyncIterable<SseMessage<unknown>> {
+    const deviceId = deviceIdOf(context);
+    const signal = context.request.signal;
+    context.response.setHeader("Cache-Control", "private, no-store");
+    yield {
+      event: "state",
+      data: composeState(this.queue, this.settings, deviceId),
+    };
+    while (!signal?.aborted) {
+      const result = await this.broker.waitChange(signal);
+      if (result === "closed") return;
       if (result === "ping") {
         yield { event: "ping", data: "" };
       } else {
         yield {
           event: "state",
-          data: composeState(this.queue, this.settings),
+          data: composeState(this.queue, this.settings, deviceId),
         };
       }
     }

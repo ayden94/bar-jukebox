@@ -8,7 +8,7 @@ export type SongView = {
   trackNumber: number;
   durationSec: number | null;
   requestedBy: string;
-  deviceId: string | null;
+  isMine: boolean;
 };
 
 export type NowPlayingView = {

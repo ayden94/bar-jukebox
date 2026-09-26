@@ -12,10 +12,12 @@ import {
 import { deviceIdOf } from "../../middleware/device-cookie.middleware";
 import { SettingsService } from "../settings/settings.service";
 import { makeSong } from "../shared/song";
-import { composeState } from "../shared/state-view";
+import { composeState, publicSong } from "../shared/state-view";
 import { TableService } from "../table/table.service";
 import { CancelDto, RequestSongDto } from "./dto";
 import { QueueService } from "./queue.service";
+
+class StateDto {}
 
 @Inject(QueueService, TableService, SettingsService)
 @Controller()
@@ -27,8 +29,10 @@ export class QueueController {
   ) {}
 
   @Get("/api/state")
-  state() {
-    return composeState(this.queue, this.settings);
+  @RequestDto(StateDto)
+  state(_dto: StateDto, context: RequestContext) {
+    context.response.setHeader("Cache-Control", "private, no-store");
+    return composeState(this.queue, this.settings, deviceIdOf(context));
   }
 
   @Post("/api/request")
@@ -73,7 +77,7 @@ export class QueueController {
     console.log(
       `+ request: ${song.trackName} — ${song.artistName} (${song.requestedBy})`,
     );
-    return { ok: true, song };
+    return { ok: true, song: publicSong(song, deviceId) };
   }
 
   @Post("/api/cancel")

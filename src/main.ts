@@ -67,6 +67,10 @@ const AppModule = createJukeboxModule({
 
 const PORT = Number(process.env.PORT ?? 5173);
 
+if (!process.env.DEVICE_COOKIE_SECRET && !process.env.ADMIN_TOKEN) {
+  throw new Error("DEVICE_COOKIE_SECRET 또는 ADMIN_TOKEN이 필요해요");
+}
+
 const app = await FluoFactory.create(AppModule, {
   adapter: BunHttpApplicationAdapter.create({ port: PORT, idleTimeout: 255 }),
 });

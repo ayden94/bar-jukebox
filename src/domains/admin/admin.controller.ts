@@ -19,6 +19,7 @@ import {
 } from "../settings/settings.service";
 import { BASE_URL } from "../shared/config";
 import { makeSong } from "../shared/song";
+import { publicSong } from "../shared/state-view";
 import { TableIdDto, TableLabelDto } from "../table/dto";
 import { TableService } from "../table/table.service";
 import { AdminTokenGuard } from "./admin-token.guard";
@@ -54,7 +55,7 @@ export class AdminController {
     const song = makeSong(dto, "바텐더", null, true, null);
     await this.queue.enqueue(song);
     console.log(`+ staff add: ${song.trackName} — ${song.artistName}`);
-    return { ok: true, song };
+    return { ok: true, song: publicSong(song, "") };
   }
 
   @Post("/reorder")

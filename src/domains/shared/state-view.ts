@@ -1,4 +1,4 @@
-import type { JukeboxState, NowPlaying, Song } from "./types";
+import type { JukeboxState, NowPlaying, PublicSong, Song } from "./types";
 
 export type QueueStateView = {
   snapshot(): {
@@ -17,10 +17,26 @@ export type SettingsStateView = {
   };
 };
 
-// /api/state·SSE 페이로드는 기존 JukeboxState 모양을 그대로 유지한다 (프론트엔드 무변경).
+export function publicSong(song: Song, viewerId: string): PublicSong {
+  const { deviceId, ...visible } = song;
+  return { ...visible, isMine: Boolean(viewerId) && deviceId === viewerId };
+}
+
 export function composeState(
   queue: QueueStateView,
   settings: SettingsStateView,
+  viewerId: string,
 ): JukeboxState {
-  return { ...queue.snapshot(), ...settings.read() };
+  const snapshot = queue.snapshot();
+  return {
+    ...settings.read(),
+    nowPlaying: snapshot.nowPlaying
+      ? {
+          ...snapshot.nowPlaying,
+          song: publicSong(snapshot.nowPlaying.song, viewerId),
+        }
+      : null,
+    queue: snapshot.queue.map((song) => publicSong(song, viewerId)),
+    history: snapshot.history.map((song) => publicSong(song, viewerId)),
+  };
 }

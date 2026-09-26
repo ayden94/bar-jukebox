@@ -1,12 +1,5 @@
 import { Inject } from "@fluojs/core";
-import {
-  Controller,
-  ForbiddenException,
-  Get,
-  type RequestContext,
-  RequestDto,
-} from "@fluojs/http";
-import { deviceIdOf } from "../../middleware/device-cookie.middleware";
+import { Controller, ForbiddenException, Get, RequestDto } from "@fluojs/http";
 import { SettingsService } from "../settings/settings.service";
 import { TableQueryDto } from "./dto";
 import { TableService } from "./table.service";
@@ -21,7 +14,7 @@ export class TableController {
 
   @Get("/api/table")
   @RequestDto(TableQueryDto)
-  async table(dto: TableQueryDto, context: RequestContext) {
+  async table(dto: TableQueryDto) {
     const table = await this.tableService.verify(Number(dto.t), dto.k);
     if (!table) {
       throw new ForbiddenException("QR 코드를 확인할 수 없어요");
@@ -31,7 +24,6 @@ export class TableController {
       label: table.label,
       requestsPaused: this.settings.isRequestsPaused(),
       notice: this.settings.getNotice(),
-      deviceId: deviceIdOf(context),
     };
   }
 }

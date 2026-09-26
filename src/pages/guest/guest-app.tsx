@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useJukeboxSnapshot, useToast } from "../hooks";
 import { useTheme } from "../theme";
 import type { Snapshot } from "../types";
@@ -10,11 +9,9 @@ import { TopBar } from "./top-bar";
 function myActiveCount(
   queue: Snapshot["queue"],
   np: Snapshot["nowPlaying"],
-  myDevice: string,
 ): number {
-  if (!myDevice) return 0;
-  let count = queue.filter((s) => s.deviceId === myDevice).length;
-  if (np?.song.deviceId === myDevice) count += 1;
+  let count = queue.filter((s) => s.isMine).length;
+  if (np?.song.isMine) count += 1;
   return count;
 }
 
@@ -28,22 +25,6 @@ export function GuestApp({
   const [theme, setTheme] = useTheme();
   const { snap, refresh } = useJukeboxSnapshot(!error);
   const { toast, showToast } = useToast();
-  const [myDevice, setMyDevice] = useState("");
-
-  useEffect(() => {
-    if (error) return;
-    const params = new URLSearchParams(window.location.search);
-    fetch(
-      `/api/table?t=${params.get("t")}&k=${encodeURIComponent(
-        params.get("k") ?? "",
-      )}`,
-    )
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (j) setMyDevice(j.deviceId ?? "");
-      })
-      .catch(() => {});
-  }, [error]);
 
   const cancel = async (id: string) => {
     try {
@@ -78,7 +59,7 @@ export function GuestApp({
   const paused = snap?.requestsPaused ?? false;
   const queue = snap?.queue ?? [];
   const maxPerDevice = snap?.maxPerDevice ?? 1;
-  const myCount = myActiveCount(queue, np, myDevice);
+  const myCount = myActiveCount(queue, np);
   const atLimit = maxPerDevice > 0 && myCount >= maxPerDevice;
 
   return (
@@ -96,12 +77,7 @@ export function GuestApp({
         onRequested={refresh}
         showToast={showToast}
       />
-      <NowPlayingArea
-        np={np}
-        queue={queue}
-        myDevice={myDevice}
-        onCancel={cancel}
-      />
+      <NowPlayingArea np={np} queue={queue} onCancel={cancel} />
       {toast ? (
         <div className={`toast ${toast.kind}`} role="status">
           {toast.msg}
