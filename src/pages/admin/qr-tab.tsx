@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { TableRow } from "../types";
 
 type QrTabProps = {
@@ -6,6 +7,11 @@ type QrTabProps = {
 };
 
 type PrintCard = { label: string; svg: string; url: string };
+
+function QrSvg({ svg }: { svg: string }) {
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: 서버가 생성한 신뢰할 수 있는 QR SVG
+  return <div dangerouslySetInnerHTML={{ __html: svg }} />;
+}
 
 export function QrTab({ api }: QrTabProps) {
   const [tables, setTables] = useState<TableRow[]>([]);
@@ -49,13 +55,15 @@ export function QrTab({ api }: QrTabProps) {
   };
 
   const removeTable = async (id: number) => {
-    if (!window.confirm("테이블을 삭제할까요? (인쇄된 QR도 무효가 돼요)"))
+    if (!window.confirm("테이블을 삭제할까요? (인쇄된 QR도 무효가 돼요)")) {
       return;
+    }
     await api(`/api/admin/tables/${id}`, { method: "DELETE" });
     loadTables();
   };
 
   const printAll = async () => {
+    if (!tables.length) return;
     const cards: PrintCard[] = [];
     for (const t of tables) {
       const j = await (await api(`/api/admin/tables/${t.id}/qr`)).json();
@@ -63,6 +71,14 @@ export function QrTab({ api }: QrTabProps) {
     }
     setPrintCards(cards);
   };
+
+  useEffect(() => {
+    if (!printCards.length) return;
+    document.body.classList.add("printing");
+    window.print();
+    document.body.classList.remove("printing");
+    return () => document.body.classList.remove("printing");
+  }, [printCards]);
 
   const tableRows = tables.flatMap((t) => {
     const rows = [
@@ -92,8 +108,7 @@ export function QrTab({ api }: QrTabProps) {
       rows.push(
         <li key={`qr-${t.id}`}>
           <div className="qrbox">
-            {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 서버가 생성한 신뢰할 수 있는 QR SVG */}
-            <div dangerouslySetInnerHTML={{ __html: qr.svg }} />
+            <QrSvg svg={qr.svg} />
             <div className="qurl">{qr.url}</div>
           </div>
         </li>,
@@ -131,21 +146,25 @@ export function QrTab({ api }: QrTabProps) {
           </div>
         </div>
       </div>
-      {printCards.length ? (
-        <div id="printArea">
-          <div className="qcards">
-            {printCards.map((c) => (
-              <div className="qcard" key={c.url}>
-                <h3>{c.label}</h3>
-                {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 서버가 생성한 신뢰할 수 있는 QR SVG */}
-                <div dangerouslySetInnerHTML={{ __html: c.svg }} />
-                <div className="qhint">📱 QR을 스캔해서 노래를 신청하세요</div>
-                <div className="qurl">{c.url}</div>
+      {printCards.length
+        ? createPortal(
+            <div id="printArea">
+              <div className="qcards">
+                {printCards.map((c) => (
+                  <div className="qcard" key={c.url}>
+                    <h3>{c.label}</h3>
+                    <QrSvg svg={c.svg} />
+                    <div className="qhint">
+                      📱 QR을 스캔해서 노래를 신청하세요
+                    </div>
+                    <div className="qurl">{c.url}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

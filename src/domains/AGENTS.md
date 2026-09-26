@@ -6,9 +6,9 @@
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| 큐 규칙(1곡/기기, 중복 트랙, 본인 취소) | queue/queue.service.ts | now-playing은 규칙상 큐와 한 덩어리라 같은 서비스가 관리 |
+| 큐 규칙(기기/테이블 곡 수 상한, 중복 트랙, 본인 취소) | queue/queue.service.ts | now-playing은 규칙상 큐와 한 덩어리라 같은 서비스가 관리. 상한 값은 settings에서 관리 (기본 기기 1곡/테이블 5곡, 0은 무제한) |
 | 큐/히스토리/재생중 영속화 | queue/queue.repository.ts | 증분 쓰기; fire-and-forget 쓰기는 writeChain으로 직렬화 |
-| 설정(요청 중단·공지) | settings/ | settings.service → settings.repository upsert |
+| 설정(요청 중단·공지·곡 수 상한) | settings/ | settings.service → settings.repository upsert |
 | 테이블 CRUD·QR URL | table/ | 시크릿 발급은 table.service.create |
 | 재생 | playback/playback.service.ts | playSong mute→skip 트릭; waitForTrackEnd가 앨범 자동진행 차단 |
 | 곡 검색 | search/search.service.ts | iTunes Search → music:// 앨범 URL |

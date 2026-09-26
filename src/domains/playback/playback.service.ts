@@ -153,6 +153,8 @@ export async function playSong(song: Song): Promise<void> {
   const skips = Math.max(0, song.trackNumber - 1);
 
   await osa('tell application "Music" to stop');
+  await osa('tell application "Music" to set song repeat to off');
+  await osa('tell application "Music" to set shuffle enabled to false');
   await osa(`tell application "Music" to open location "${albumUrl}"`);
   await sleep(2000);
 
@@ -166,7 +168,12 @@ export async function playSong(song: Song): Promise<void> {
       },
       skips,
     );
-    await osa('tell application "Music" to play');
+    // once 파라미터: 요청 트랙 하나만 재생 대기에 남기고 앨범 대기열을 지운다. 미지원 버전은 단순 재생으로 폴백.
+    try {
+      await osa('tell application "Music" to play (current track) once true');
+    } catch {
+      await osa('tell application "Music" to play');
+    }
   });
 }
 
@@ -235,7 +242,10 @@ export class PlaybackService {
   private async waitForTrackEnd(expectedTrackId: number | null): Promise<void> {
     const duration = await getTrackDuration();
     if (duration !== null) this.queue.updateProgress(0, duration);
-    while (true) {
+    const deadline =
+      Date.now() +
+      (duration !== null ? (duration + 15) * 1000 : 15 * 60 * 1000);
+    while (Date.now() < deadline) {
       const position = await getPlayerPosition();
       if (position !== null) {
         this.queue.updateProgress(position, duration);
@@ -260,5 +270,6 @@ export class PlaybackService {
         duration !== null && position !== null && position >= duration - 3;
       await sleep(nearEnd ? 120 : 300);
     }
+    await this.stop();
   }
 }

@@ -10,6 +10,13 @@ export type QueueSnapshot = {
   history: Song[];
 };
 
+export type EnqueueLimits = { maxPerDevice: number; maxPerTable: number };
+
+export type EnqueueDeniedReason =
+  | "device-limit"
+  | "table-limit"
+  | "duplicate-track";
+
 export class QueueService {
   private nowPlaying: NowPlaying | null = null;
   private queue: Song[] = [];
@@ -41,6 +48,37 @@ export class QueueService {
   trackIsActive(trackId: number): boolean {
     if (this.nowPlaying?.song.trackId === trackId) return true;
     return this.queue.some((song) => song.trackId === trackId);
+  }
+
+  // 신청 규칙 판정: 대기+재생중을 "활성"으로 보고 중복/기기 상한/테이블 상한을 검사한다.
+  enqueueDeniedReason(
+    song: Song,
+    limits: EnqueueLimits,
+  ): EnqueueDeniedReason | null {
+    if (song.isStaff) return null;
+    if (
+      song.deviceId &&
+      limits.maxPerDevice > 0 &&
+      this.activeCount((s) => s.deviceId === song.deviceId) >=
+        limits.maxPerDevice
+    ) {
+      return "device-limit";
+    }
+    if (
+      song.tableId != null &&
+      limits.maxPerTable > 0 &&
+      this.activeCount((s) => s.tableId === song.tableId) >= limits.maxPerTable
+    ) {
+      return "table-limit";
+    }
+    if (this.trackIsActive(song.trackId)) return "duplicate-track";
+    return null;
+  }
+
+  private activeCount(match: (song: Song) => boolean): number {
+    let count = this.queue.filter(match).length;
+    if (this.nowPlaying && match(this.nowPlaying.song)) count += 1;
+    return count;
   }
 
   nowPlayingSong(): Song | null {

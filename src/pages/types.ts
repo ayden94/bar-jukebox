@@ -23,6 +23,8 @@ export type Snapshot = {
   history: SongView[];
   requestsPaused: boolean;
   notice: string;
+  maxPerDevice: number;
+  maxPerTable: number;
 };
 
 export type SearchHit = {

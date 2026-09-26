@@ -50,7 +50,7 @@ export class AdminController {
   @Post("/add")
   @RequestDto(SongInputDto)
   add(dto: SongInputDto) {
-    const song = makeSong(dto, "바텐더", null, true);
+    const song = makeSong(dto, "바텐더", null, true, null);
     this.queue.enqueue(song);
     console.log(`+ staff add: ${song.trackName} — ${song.artistName}`);
     return { ok: true, song };
@@ -136,6 +136,25 @@ export class AdminController {
       }
       this.settingsService.setNotice(dto.notice);
     }
+    if (typeof dto?.maxPerDevice === "number") {
+      this.settingsService.setMaxPerDevice(
+        validateLimit(dto.maxPerDevice, "기기당 곡 수 제한"),
+      );
+    }
+    if (typeof dto?.maxPerTable === "number") {
+      this.settingsService.setMaxPerTable(
+        validateLimit(dto.maxPerTable, "테이블당 곡 수 제한"),
+      );
+    }
     return { ok: true };
   }
+}
+
+function validateLimit(value: number, label: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > 99) {
+    throw new BadRequestException(
+      `${label}은(는) 0~99 사이여야 해요 (0은 무제한)`,
+    );
+  }
+  return value;
 }

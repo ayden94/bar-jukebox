@@ -20,7 +20,10 @@ export function SearchPanel({
   const [results, setResults] = useState<SearchHit[]>([]);
   const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE);
   const [searching, setSearching] = useState(false);
+  const [searchedTerm, setSearchedTerm] = useState("");
+  const [requestedTrack, setRequestedTrack] = useState<string | null>(null);
   const searchTimer = useRef<number | null>(null);
+  const requestPending = useRef(false);
   const moreRef = useInfiniteScroll(
     visibleCount < results.length,
     () => setVisibleCount((c) => c + SEARCH_PAGE),
@@ -30,8 +33,13 @@ export function SearchPanel({
   const doSearch = async (termArg?: string) => {
     const term = (termArg ?? q).trim();
     window.clearTimeout(searchTimer.current ?? undefined);
-    if (!term) return;
+    if (!term) {
+      setResults([]);
+      return;
+    }
     setSearching(true);
+    setSearchedTerm("");
+    setResults([]);
     try {
       const r = await (
         await fetch(`/api/search?q=${encodeURIComponent(term)}`)
@@ -40,11 +48,8 @@ export function SearchPanel({
         showToast(r.error, "err");
         return;
       }
-      if (!r.hits.length) {
-        showToast("검색 결과가 없어요", "err");
-        return;
-      }
       setResults(r.hits);
+      setSearchedTerm(term);
       setVisibleCount(SEARCH_PAGE);
     } catch {
       showToast("검색 중 오류가 발생했어요", "err");
@@ -55,11 +60,15 @@ export function SearchPanel({
 
   const onSearchInput = (value: string) => {
     setQ(value);
+    setSearchedTerm("");
     window.clearTimeout(searchTimer.current ?? undefined);
     searchTimer.current = window.setTimeout(() => doSearch(value), 450);
   };
 
   const request = async (hit: SearchHit) => {
+    if (requestPending.current) return;
+    requestPending.current = true;
+    setRequestedTrack(String(hit.trackId));
     const params = new URLSearchParams(window.location.search);
     try {
       const r = await fetch("/api/request", {
@@ -76,21 +85,30 @@ export function SearchPanel({
         showToast(j.error || "신청 실패", "err");
         return;
       }
-      showToast("신청됐어요! 순서가 오면 틀어줄게요 🎧", "ok");
+      showToast("신청됐어요. 순서가 오면 틀어줄게요", "ok");
       onRequested();
     } catch {
       showToast("네트워크 오류", "err");
+    } finally {
+      requestPending.current = false;
+      setRequestedTrack(null);
     }
   };
 
   return (
     <>
+      <div className="searchintro">
+        <span className="eyebrow">오늘의 선곡</span>
+        <h1>듣고 싶은 곡을 신청해요</h1>
+        <p>노래나 가수를 찾아 신청해보세요</p>
+      </div>
       <div className="searchwrap">
         <div className="field">
           <input
             id="q"
             type="search"
-            placeholder="노래, 가수 검색"
+            placeholder="노래나 가수를 검색해요"
+            aria-label="노래나 가수 검색"
             enterKeyHint="search"
             autoComplete="off"
             value={q}
@@ -107,11 +125,20 @@ export function SearchPanel({
             onClick={() => doSearch()}
             disabled={searching}
           >
-            검색
+            {searching ? "검색 중" : "검색"}
           </button>
         </div>
       </div>
       {hint}
+      <div className="resultstatus" role="status" aria-live="polite">
+        {searching
+          ? "곡을 찾고 있어요"
+          : searchedTerm && results.length === 0
+            ? "검색 결과가 없어요. 다른 노래나 가수를 검색해보세요"
+            : results.length > 0
+              ? `검색 결과 ${results.length}곡`
+              : null}
+      </div>
       <ul className="results">
         {results.slice(0, visibleCount).map((h) => (
           <li key={h.trackId}>
@@ -123,10 +150,10 @@ export function SearchPanel({
             <button
               type="button"
               className="req"
-              disabled={blocked || searching}
+              disabled={blocked || searching || requestedTrack !== null}
               onClick={() => request(h)}
             >
-              신청
+              {requestedTrack === String(h.trackId) ? "신청 중" : "신청"}
             </button>
           </li>
         ))}

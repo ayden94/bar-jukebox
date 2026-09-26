@@ -1,15 +1,15 @@
 export function Hint({
   paused,
-  mine,
+  atLimit,
   hasQueue,
 }: {
   paused: boolean;
-  mine: boolean;
+  atLimit: boolean;
   hasQueue: boolean;
 }) {
   const text = paused
     ? "잠시 후에 곡 신청을 받아요"
-    : mine
+    : atLimit
       ? "신청한 곡이 재생 대기 중이에요. 끝나면 또 신청할 수 있어요"
       : hasQueue
         ? null

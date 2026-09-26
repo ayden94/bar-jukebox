@@ -42,20 +42,37 @@ export function NowPlayingArea({
           </div>
         </button>
       ) : null}
-      <div className={`sheet${sheetOpen ? " open" : ""}`}>
-        <button
-          type="button"
-          className="grabber"
-          onClick={() => setSheetOpen(false)}
-          aria-label="닫기"
-        >
-          ⌄
-        </button>
+      <div
+        className={`sheetbackdrop${sheetOpen ? " open" : ""}`}
+        aria-hidden="true"
+        onClick={() => setSheetOpen(false)}
+      />
+      <section
+        className={`sheet${sheetOpen ? " open" : ""}`}
+        role="dialog"
+        aria-modal={sheetOpen}
+        aria-label="재생 화면"
+        inert={!sheetOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setSheetOpen(false);
+        }}
+      >
+        <div className="sheettop">
+          <span className="sheetgrab" aria-hidden="true" />
+          <button
+            type="button"
+            className="sheetclose"
+            onClick={() => setSheetOpen(false)}
+            aria-label="재생 화면 닫기"
+          >
+            닫기
+          </button>
+        </div>
         {np && npSong ? (
           <div>
             <div className="nphead">
               <img className="bigart" src={art(npSong.artworkUrl)} alt="" />
-              <div className="nplabel">NOW PLAYING</div>
+              <div className="nplabel">지금 재생 중</div>
               <div className="nptitle">{npSong.trackName}</div>
               <div className="npartist">{npSong.artistName}</div>
               <div className="npby">{`${npSong.requestedBy}님이 신청`}</div>
@@ -75,6 +92,7 @@ export function NowPlayingArea({
           type="button"
           className={`qtoggle${queueOpen ? " exp" : ""}`}
           onClick={() => setQueueOpen(!queueOpen)}
+          aria-expanded={queueOpen}
         >
           <span className="left">
             {"재생 예정 "}
@@ -103,9 +121,9 @@ export function NowPlayingArea({
                         type="button"
                         className="cancelx"
                         onClick={() => onCancel(s.id)}
-                        aria-label="신청 취소"
+                        aria-label={`${s.trackName} 신청 취소`}
                       >
-                        ✕
+                        취소
                       </button>
                     ) : null}
                   </li>
@@ -118,7 +136,7 @@ export function NowPlayingArea({
             </div>
           )
         ) : null}
-      </div>
+      </section>
     </>
   );
 }

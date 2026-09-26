@@ -9,7 +9,12 @@ export type QueueStateView = {
 };
 
 export type SettingsStateView = {
-  read(): { requestsPaused: boolean; notice: string };
+  read(): {
+    requestsPaused: boolean;
+    notice: string;
+    maxPerDevice: number;
+    maxPerTable: number;
+  };
 };
 
 // /api/state·SSE 페이로드는 기존 JukeboxState 모양을 그대로 유지한다 (프론트엔드 무변경).

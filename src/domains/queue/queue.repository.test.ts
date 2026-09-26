@@ -23,6 +23,7 @@ function song(overrides: Partial<Song> = {}): Song {
     durationSec: 200,
     requestedBy: "테이블 1",
     deviceId: "device-1",
+    tableId: null,
     isStaff: false,
     requestedAt: Date.now(),
     ...overrides,

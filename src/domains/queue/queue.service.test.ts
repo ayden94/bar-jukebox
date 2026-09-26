@@ -34,6 +34,7 @@ function song(overrides: Partial<Song> = {}): Song {
     durationSec: 200,
     requestedBy: "테이블 1",
     deviceId: "device-1",
+    tableId: null,
     isStaff: false,
     requestedAt: Date.now(),
     ...overrides,
@@ -76,6 +77,104 @@ test("본인 곡만 취소 가능", () => {
   expect(queue.removeOwnedFromQueue("others", "d1")).toBe(false);
   expect(queue.removeOwnedFromQueue("mine", "d1")).toBe(true);
   expect(queue.snapshot().queue.map((s) => s.id)).toEqual(["others"]);
+});
+
+test("기기당 곡 수 상한을 넘으면 거부해요", () => {
+  const queue = new QueueService(memoryRepository());
+  queue.hydrate(emptyQueueState());
+  const limits = { maxPerDevice: 1, maxPerTable: 0 };
+  queue.enqueue(song({ id: "a", deviceId: "d1", tableId: 1, trackId: 10 }));
+
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "b", deviceId: "d1", tableId: 1, trackId: 11 }),
+      limits,
+    ),
+  ).toBe("device-limit");
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "c", deviceId: "d2", tableId: 1, trackId: 12 }),
+      limits,
+    ),
+  ).toBeNull();
+});
+
+test("테이블당 곡 수 상한은 재생 중인 곡도 세요", () => {
+  const queue = new QueueService(memoryRepository());
+  queue.hydrate(emptyQueueState());
+  const limits = { maxPerDevice: 0, maxPerTable: 2 };
+  queue.enqueue(song({ id: "a", deviceId: "d1", tableId: 7, trackId: 10 }));
+  queue.enqueue(song({ id: "b", deviceId: "d2", tableId: 7, trackId: 11 }));
+
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "c", deviceId: "d3", tableId: 7, trackId: 12 }),
+      limits,
+    ),
+  ).toBe("table-limit");
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "d", deviceId: "d4", tableId: 8, trackId: 13 }),
+      limits,
+    ),
+  ).toBeNull();
+
+  queue.takeNext();
+  queue.setNowPlaying(
+    song({ id: "np", deviceId: "d5", tableId: 7, trackId: 14 }),
+  );
+  queue.enqueue(song({ id: "e", deviceId: "d6", tableId: 7, trackId: 15 }));
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "f", deviceId: "d7", tableId: 7, trackId: 16 }),
+      limits,
+    ),
+  ).toBe("table-limit");
+});
+
+test("상한 0은 무제한이에요", () => {
+  const queue = new QueueService(memoryRepository());
+  queue.hydrate(emptyQueueState());
+  queue.enqueue(song({ id: "a", deviceId: "d1", tableId: 1, trackId: 10 }));
+
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "b", deviceId: "d1", tableId: 1, trackId: 11 }),
+      { maxPerDevice: 0, maxPerTable: 0 },
+    ),
+  ).toBeNull();
+});
+
+test("바텐더 추가는 곡 수 제한을 건너뛰어요", () => {
+  const queue = new QueueService(memoryRepository());
+  queue.hydrate(emptyQueueState());
+  queue.enqueue(song({ id: "a", deviceId: "d1", tableId: 1, trackId: 10 }));
+
+  expect(
+    queue.enqueueDeniedReason(
+      song({
+        id: "b",
+        deviceId: null,
+        tableId: null,
+        isStaff: true,
+        trackId: 11,
+      }),
+      { maxPerDevice: 1, maxPerTable: 1 },
+    ),
+  ).toBeNull();
+});
+
+test("이미 대기 중인 트랙은 다시 신청할 수 없어요", () => {
+  const queue = new QueueService(memoryRepository());
+  queue.hydrate(emptyQueueState());
+  queue.enqueue(song({ id: "a", deviceId: "d1", tableId: 1, trackId: 10 }));
+
+  expect(
+    queue.enqueueDeniedReason(
+      song({ id: "b", deviceId: "d2", tableId: 2, trackId: 10 }),
+      { maxPerDevice: 1, maxPerTable: 5 },
+    ),
+  ).toBe("duplicate-track");
 });
 
 test("reorder는 모든 곡을 보존하고 지정 순서를 앞으로 당긴다", () => {

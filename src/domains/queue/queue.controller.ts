@@ -47,16 +47,29 @@ export class QueueController {
         "기기를 확인할 수 없어요. 페이지를 새로고침해주세요",
       );
     }
-    if (this.queue.deviceHasActive(deviceId)) {
+
+    const song = makeSong(dto, table.label, deviceId, false, dto.tableId);
+    const limits = this.settings.read();
+    const denied = this.queue.enqueueDeniedReason(song, {
+      maxPerDevice: limits.maxPerDevice,
+      maxPerTable: limits.maxPerTable,
+    });
+    if (denied === "device-limit") {
       throw new ConflictException(
-        "이 기기에서 신청한 곡이 아직 대기 중이에요. 그 곡이 재생된 뒤에 또 신청할 수 있어요.",
+        limits.maxPerDevice === 1
+          ? "이 기기에서 신청한 곡이 아직 대기 중이에요. 그 곡이 재생된 뒤에 또 신청할 수 있어요."
+          : `한 기기당 최대 ${limits.maxPerDevice}곡까지만 대기열에 올릴 수 있어요. 재생되면 다시 신청할 수 있어요.`,
       );
     }
-    if (this.queue.trackIsActive(dto.trackId)) {
+    if (denied === "table-limit") {
+      throw new ConflictException(
+        `테이블당 최대 ${limits.maxPerTable}곡까지만 대기열에 올릴 수 있어요. 한 곡이 재생되면 다시 신청할 수 있어요.`,
+      );
+    }
+    if (denied === "duplicate-track") {
       throw new ConflictException("그 곡은 이미 대기열에 있어요");
     }
 
-    const song = makeSong(dto, table.label, deviceId, false);
     this.queue.enqueue(song);
     console.log(
       `+ request: ${song.trackName} — ${song.artistName} (${song.requestedBy})`,

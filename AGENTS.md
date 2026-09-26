@@ -25,7 +25,7 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 | Task | Location | Notes |
 |------|----------|-------|
 | Add/modify an API route | src/domains/<domain>/<domain>.controller.ts | @Get/@Post + @RequestDto; DTO in the domain's dto.ts |
-| Queue/state rules | src/domains/queue/queue.service.ts | 1 song/device, no duplicate track, own-cancel-only |
+| Queue/state rules | src/domains/queue/queue.service.ts | per-device/per-table song caps (settings-backed, default 1/5), no duplicate track, own-cancel-only |
 | Persistence / schema | src/infra/ + src/domains/*/repository.ts | drizzle-orm/libsql over @libsql/client (async); incremental per-mutation writes via repositories |
 | Music playback | src/domains/playback/playback.service.ts | osascript Music.app; mute → album-skip trick |
 | Song search | src/domains/search/search.service.ts | iTunes Search API → `music://` album URLs |

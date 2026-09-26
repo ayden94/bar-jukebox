@@ -9,6 +9,7 @@ export type Song = {
   durationSec: number | null;
   requestedBy: string;
   deviceId: string | null;
+  tableId: number | null;
   isStaff: boolean;
   requestedAt: number;
 };
@@ -28,4 +29,6 @@ export type JukeboxState = {
   history: Song[];
   requestsPaused: boolean;
   notice: string;
+  maxPerDevice: number;
+  maxPerTable: number;
 };

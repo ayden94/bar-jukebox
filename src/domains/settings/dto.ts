@@ -1,5 +1,5 @@
 import { FromBody, Optional } from "@fluojs/http";
-import { IsBoolean, IsString } from "@fluojs/validation";
+import { IsBoolean, IsInt, IsString } from "@fluojs/validation";
 
 export class SettingsDto {
   @Optional()
@@ -10,4 +10,12 @@ export class SettingsDto {
   @IsString()
   @FromBody("notice")
   notice: string | null = null;
+  @Optional()
+  @IsInt()
+  @FromBody("maxPerDevice")
+  maxPerDevice: number | null = null;
+  @Optional()
+  @IsInt()
+  @FromBody("maxPerTable")
+  maxPerTable: number | null = null;
 }

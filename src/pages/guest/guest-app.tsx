@@ -7,12 +7,15 @@ import { NowPlayingArea } from "./now-playing";
 import { SearchPanel } from "./search-panel";
 import { TopBar } from "./top-bar";
 
-function deviceHasActive(snap: Snapshot, myDevice: string): boolean {
-  if (!myDevice) return false;
-  return (
-    snap.nowPlaying?.song.deviceId === myDevice ||
-    snap.queue.some((s) => s.deviceId === myDevice)
-  );
+function myActiveCount(
+  queue: Snapshot["queue"],
+  np: Snapshot["nowPlaying"],
+  myDevice: string,
+): number {
+  if (!myDevice) return 0;
+  let count = queue.filter((s) => s.deviceId === myDevice).length;
+  if (np?.song.deviceId === myDevice) count += 1;
+  return count;
 }
 
 export function GuestApp({
@@ -63,7 +66,9 @@ export function GuestApp({
   if (error) {
     return (
       <div className="boot">
-        <div className="logo">🚫</div>
+        <div className="logo" aria-hidden="true">
+          ♪
+        </div>
         <div>{error}</div>
       </div>
     );
@@ -72,16 +77,9 @@ export function GuestApp({
   const np = snap?.nowPlaying ?? null;
   const paused = snap?.requestsPaused ?? false;
   const queue = snap?.queue ?? [];
-  const mine = deviceHasActive(
-    snap ?? {
-      nowPlaying: null,
-      queue: [],
-      history: [],
-      requestsPaused: false,
-      notice: "",
-    },
-    myDevice,
-  );
+  const maxPerDevice = snap?.maxPerDevice ?? 1;
+  const myCount = myActiveCount(queue, np, myDevice);
+  const atLimit = maxPerDevice > 0 && myCount >= maxPerDevice;
 
   return (
     <div className="guest">
@@ -89,12 +87,12 @@ export function GuestApp({
       {paused ? (
         <div className="banner pause">지금은 곡 신청을 받고 있지 않아요</div>
       ) : null}
-      {snap?.notice ? (
-        <div className="banner notice">{`📢 ${snap.notice}`}</div>
-      ) : null}
+      {snap?.notice ? <div className="banner notice">{snap.notice}</div> : null}
       <SearchPanel
-        blocked={paused || mine}
-        hint={<Hint paused={paused} mine={mine} hasQueue={queue.length > 0} />}
+        blocked={paused || atLimit}
+        hint={
+          <Hint paused={paused} atLimit={atLimit} hasQueue={queue.length > 0} />
+        }
         onRequested={refresh}
         showToast={showToast}
       />
@@ -104,7 +102,11 @@ export function GuestApp({
         myDevice={myDevice}
         onCancel={cancel}
       />
-      {toast ? <div className={`toast ${toast.kind}`}>{toast.msg}</div> : null}
+      {toast ? (
+        <div className={`toast ${toast.kind}`} role="status">
+          {toast.msg}
+        </div>
+      ) : null}
     </div>
   );
 }

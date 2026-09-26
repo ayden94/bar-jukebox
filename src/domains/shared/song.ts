@@ -16,6 +16,7 @@ export function makeSong(
   requestedBy: string,
   deviceId: string | null,
   isStaff: boolean,
+  tableId: number | null,
 ): Song {
   return {
     id: crypto.randomUUID(),
@@ -28,6 +29,7 @@ export function makeSong(
     durationSec: input.durationSec ?? null,
     requestedBy,
     deviceId,
+    tableId,
     isStaff,
     requestedAt: Date.now(),
   };
