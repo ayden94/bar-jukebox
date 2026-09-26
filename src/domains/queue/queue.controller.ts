@@ -50,7 +50,7 @@ export class QueueController {
 
     const song = makeSong(dto, table.label, deviceId, false, dto.tableId);
     const limits = this.settings.read();
-    const denied = this.queue.enqueueDeniedReason(song, {
+    const denied = await this.queue.enqueue(song, {
       maxPerDevice: limits.maxPerDevice,
       maxPerTable: limits.maxPerTable,
     });
@@ -70,7 +70,6 @@ export class QueueController {
       throw new ConflictException("그 곡은 이미 대기열에 있어요");
     }
 
-    this.queue.enqueue(song);
     console.log(
       `+ request: ${song.trackName} — ${song.artistName} (${song.requestedBy})`,
     );
@@ -79,9 +78,9 @@ export class QueueController {
 
   @Post("/api/cancel")
   @RequestDto(CancelDto)
-  cancel(dto: CancelDto, context: RequestContext) {
+  async cancel(dto: CancelDto, context: RequestContext) {
     if (!dto.id) throw new BadRequestException("id가 필요해요");
-    const removed = this.queue.removeOwnedFromQueue(
+    const removed = await this.queue.removeOwnedFromQueue(
       dto.id,
       deviceIdOf(context),
     );

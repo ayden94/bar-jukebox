@@ -33,36 +33,34 @@ export class AdminController {
 
   @Post("/skip")
   async skip() {
-    const current = this.queue.nowPlayingSong();
-    await this.playback.stop().catch((e) => console.error("stop error:", e));
-    if (current) this.queue.finishNowPlaying("failed");
+    await this.playback.skip();
     return { ok: true };
   }
 
   @Post("/remove")
   @RequestDto(CancelDto)
-  remove(dto: CancelDto) {
+  async remove(dto: CancelDto) {
     if (!dto?.id) throw new BadRequestException("id가 필요해요");
-    const removed = this.queue.removeFromQueue(dto.id);
+    const removed = await this.queue.removeFromQueue(dto.id);
     return { ok: removed };
   }
 
   @Post("/add")
   @RequestDto(SongInputDto)
-  add(dto: SongInputDto) {
+  async add(dto: SongInputDto) {
     const song = makeSong(dto, "바텐더", null, true, null);
-    this.queue.enqueue(song);
+    await this.queue.enqueue(song);
     console.log(`+ staff add: ${song.trackName} — ${song.artistName}`);
     return { ok: true, song };
   }
 
   @Post("/reorder")
   @RequestDto(ReorderDto)
-  reorder(dto: ReorderDto) {
+  async reorder(dto: ReorderDto) {
     if (!Array.isArray(dto?.ids)) {
       throw new BadRequestException("ids 배열이 필요해요");
     }
-    this.queue.reorder(dto.ids);
+    await this.queue.reorder(dto.ids);
     return { ok: true };
   }
 

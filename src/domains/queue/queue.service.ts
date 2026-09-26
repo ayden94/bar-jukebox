@@ -22,6 +22,7 @@ export class QueueService {
   private queue: Song[] = [];
   private history: Song[] = [];
   private lastProgressSec = -1;
+  private mutationChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly repository: QueueRepository) {}
 
@@ -85,35 +86,52 @@ export class QueueService {
     return this.nowPlaying?.song ?? null;
   }
 
-  enqueue(song: Song): void {
-    this.queue.push(song);
-    emit("mutate");
-    this.persist(this.repository.insertQueueSong(song, this.queue.length - 1));
+  enqueue(
+    song: Song,
+    limits: EnqueueLimits = { maxPerDevice: 1, maxPerTable: 5 },
+  ): Promise<EnqueueDeniedReason | null> {
+    return this.mutate(async () => {
+      const denied = this.enqueueDeniedReason(song, limits);
+      if (denied) return denied;
+      await this.repository.insertQueueSong(song);
+      this.queue.push(song);
+      emit("mutate");
+      return null;
+    });
   }
 
-  takeNext(): Song | null {
-    const song = this.queue.shift() ?? null;
-    if (song) this.persist(this.repository.removeQueueSong(song.id));
-    return song;
+  takeAndStart(): Promise<Song | null> {
+    return this.mutate(async () => {
+      if (this.nowPlaying) return null;
+      const song = this.queue[0];
+      if (!song) return null;
+      const startedAt = Date.now();
+      await this.repository.takeAndStart(song, startedAt);
+      this.queue.shift();
+      this.nowPlaying = {
+        song,
+        startedAt,
+        status: "playing",
+        positionSec: 0,
+        durationSec: null,
+      };
+      this.lastProgressSec = -1;
+      emit("mutate");
+      return song;
+    });
   }
 
-  setNowPlaying(song: Song): void {
-    this.nowPlaying = {
-      song,
-      startedAt: Date.now(),
-      status: "playing",
-      positionSec: 0,
-      durationSec: null,
-    };
-    this.lastProgressSec = -1;
-    emit("mutate");
-    this.persist(
-      this.repository.setNowPlaying(song, this.nowPlaying.startedAt),
-    );
-  }
-
-  updateProgress(positionSec: number, durationSec: number | null): void {
-    if (!this.nowPlaying) return;
+  updateProgress(
+    positionSec: number,
+    durationSec: number | null,
+    expectedSongId?: string,
+  ): void {
+    if (
+      !this.nowPlaying ||
+      (expectedSongId !== undefined &&
+        this.nowPlaying.song.id !== expectedSongId)
+    )
+      return;
     const pos = Math.max(0, Math.round(positionSec));
     this.nowPlaying.positionSec = pos;
     this.nowPlaying.durationSec = durationSec;
@@ -123,54 +141,72 @@ export class QueueService {
     }
   }
 
-  finishNowPlaying(result: "done" | "failed"): void {
-    const song = this.nowPlaying?.song;
-    if (!song) return;
-    if (result === "done") {
-      this.history.unshift(song);
-      if (this.history.length > MAX_HISTORY) this.history.pop();
-    }
-    this.nowPlaying = null;
-    this.lastProgressSec = -1;
-    emit("mutate");
-    if (result === "done") {
-      this.persist(this.repository.prependHistory(song, MAX_HISTORY));
-    }
-    this.persist(this.repository.clearNowPlaying());
+  finishNowPlaying(
+    result: "done" | "failed",
+    expectedSongId: string,
+  ): Promise<boolean> {
+    return this.mutate(async () => {
+      const song = this.nowPlaying?.song;
+      // 이전 곡의 완료/건너뛰기 요청이 다음 곡을 지우지 않아요.
+      if (!song || song.id !== expectedSongId) return false;
+      await this.repository.finishNowPlaying(song, result, MAX_HISTORY);
+      if (result === "done") {
+        this.history.unshift(song);
+        if (this.history.length > MAX_HISTORY) this.history.pop();
+      }
+      this.nowPlaying = null;
+      this.lastProgressSec = -1;
+      emit("mutate");
+      return true;
+    });
   }
 
-  removeFromQueue(id: string): boolean {
+  removeFromQueue(id: string): Promise<boolean> {
+    return this.mutate(() => this.remove(id));
+  }
+
+  removeOwnedFromQueue(id: string, deviceId: string): Promise<boolean> {
+    return this.mutate(async () => {
+      const song = this.queue.find((s) => s.id === id);
+      if (!song || song.deviceId !== deviceId) return false;
+      return this.remove(id);
+    });
+  }
+
+  private async remove(id: string): Promise<boolean> {
     const idx = this.queue.findIndex((s) => s.id === id);
     if (idx === -1) return false;
+    await this.repository.removeQueueSong(id);
     this.queue.splice(idx, 1);
     emit("mutate");
-    this.persist(this.repository.removeQueueSong(id));
     return true;
   }
 
-  removeOwnedFromQueue(id: string, deviceId: string): boolean {
-    const song = this.queue.find((s) => s.id === id);
-    if (!song || song.deviceId !== deviceId) return false;
-    return this.removeFromQueue(id);
-  }
-
-  reorder(ids: string[]): void {
-    const map = new Map(this.queue.map((s) => [s.id, s]));
-    const next: Song[] = [];
-    for (const id of ids) {
-      const song = map.get(id);
-      if (song) {
-        next.push(song);
-        map.delete(id);
+  reorder(ids: string[]): Promise<void> {
+    return this.mutate(async () => {
+      const map = new Map(this.queue.map((s) => [s.id, s]));
+      const next: Song[] = [];
+      for (const id of ids) {
+        const song = map.get(id);
+        if (song) {
+          next.push(song);
+          map.delete(id);
+        }
       }
-    }
-    for (const remaining of map.values()) next.push(remaining);
-    this.queue = next;
-    emit("mutate");
-    this.persist(this.repository.replaceQueuePositions(next));
+      for (const remaining of map.values()) next.push(remaining);
+      await this.repository.replaceQueuePositions(next);
+      this.queue = next;
+      emit("mutate");
+    });
   }
 
-  private persist(task: Promise<void>): void {
-    void task.catch((e) => console.error("queue persist failed:", e));
+  // 규칙 판정부터 저장·메모리 반영까지 하나의 순서로 처리해요.
+  private mutate<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.mutationChain.then(task);
+    this.mutationChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 }

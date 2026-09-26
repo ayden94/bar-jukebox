@@ -144,10 +144,8 @@ export async function advanceThroughAlbum(
   }
 }
 
-// Music.app's `open location` with a music:// album URL plays the album from
-// track 1 (the ?i= song selector is ignored). To play the requested song we
-// mute, start track 1, advance with `next track` to the target track, then
-// restore volume — so the wrong-track fragments stay silent.
+// Music.app은 곡 선택자를 무시하고 앨범 첫 곡을 열어요.
+// 음소거한 채 요청 트랙까지 넘긴 뒤 원래 음량으로 복원해요.
 export async function playSong(song: Song): Promise<void> {
   const albumUrl = song.albumUrl.replace(/"/g, "");
   const skips = Math.max(0, song.trackNumber - 1);
@@ -177,84 +175,140 @@ export async function playSong(song: Song): Promise<void> {
   });
 }
 
+// 테스트에서는 이 경계 전체를 주입해 실제 Music.app에 접근하지 않아요.
+export type PlaybackDriver = {
+  play(song: Song): Promise<void>;
+  stop(): Promise<void>;
+  currentTrackId(): Promise<number | null>;
+  playerState(): Promise<PlayerState>;
+  position(): Promise<number | null>;
+  duration(): Promise<number | null>;
+  sleep(ms: number): Promise<void>;
+};
+
+const musicDriver: PlaybackDriver = {
+  play: playSong,
+  stop: () => osa('tell application "Music" to stop').then(() => undefined),
+  currentTrackId: readCurrentTrackId,
+  playerState: getPlayerState,
+  position: getPlayerPosition,
+  duration: getTrackDuration,
+  sleep,
+};
+
 export class PlaybackService {
-  constructor(private readonly queue: QueueService) {}
+  private commandChain: Promise<void> = Promise.resolve();
 
-  async stop(): Promise<void> {
-    await osa('tell application "Music" to stop');
+  constructor(
+    private readonly queue: QueueService,
+    private readonly player: PlaybackDriver = musicDriver,
+  ) {}
+
+  skip(): Promise<void> {
+    const song = this.queue.nowPlayingSong();
+    return this.command(async () => {
+      if (!song || !this.isCurrent(song.id)) return;
+      await this.player.stop();
+      await this.queue.finishNowPlaying("failed", song.id);
+    });
   }
 
-  async start(): Promise<void> {
-    // A song restored from SQLite after a server restart is already playing in
-    // Music.app — do not restart it, just wait for it to finish.
-    if (this.queue.nowPlayingSong()) {
-      console.log("resuming restored now-playing: waiting for it to end");
-      await this.waitForTrackEnd(await readCurrentTrackId());
-      this.queue.finishNowPlaying("done");
-    }
-    while (true) {
-      const song = this.queue.takeNext();
-      if (!song) {
-        await sleep(1000);
-        continue;
-      }
-      this.queue.setNowPlaying(song);
-      console.log(
-        `\u25b6 playing: ${song.trackName} \u2014 ${song.artistName} (by ${song.requestedBy})`,
+  async start(signal?: AbortSignal): Promise<void> {
+    // 복원된 곡은 다시 틀지 않고 Music.app에서 끝나기를 기다려요.
+    const restored = this.queue.nowPlayingSong();
+    if (restored) {
+      await this.waitForTrackEnd(
+        restored.id,
+        await this.player.currentTrackId(),
       );
-
-      try {
-        await playSong(song);
-      } catch (e) {
-        console.error("playSong failed:", e);
-        this.queue.finishNowPlaying("failed");
+      await this.command(() =>
+        this.queue.finishNowPlaying("done", restored.id),
+      );
+    }
+    while (!signal?.aborted) {
+      // 재생 준비와 건너뛰기의 Music.app 명령이 서로 엇갈리지 않아요.
+      const song = await this.command(async () => {
+        const next = await this.queue.takeAndStart();
+        if (!next) return null;
+        try {
+          await this.player.play(next);
+        } catch (error) {
+          await this.queue.finishNowPlaying("failed", next.id);
+          console.error("playSong failed:", error);
+          return null;
+        }
+        return next;
+      });
+      if (!song) {
+        if (!signal?.aborted) await this.player.sleep(1000);
         continue;
       }
 
-      const started = await this.waitForStart(12000);
+      const started = await this.waitForStart(song.id);
       if (!started) {
-        console.error(`\u2717 failed to start playback: ${song.trackName}`);
-        this.queue.finishNowPlaying("failed");
+        await this.command(() =>
+          this.queue.finishNowPlaying("failed", song.id),
+        );
         continue;
       }
 
-      await this.waitForTrackEnd(await readCurrentTrackId());
-      this.queue.finishNowPlaying("done");
-      console.log(`\u25a0 finished: ${song.trackName}`);
+      await this.waitForTrackEnd(song.id, await this.player.currentTrackId());
+      await this.command(() => this.queue.finishNowPlaying("done", song.id));
     }
   }
 
-  private async waitForStart(timeoutMs = 12000): Promise<boolean> {
+  private isCurrent(songId: string): boolean {
+    return this.queue.nowPlayingSong()?.id === songId;
+  }
+
+  private command<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.commandChain.then(task);
+    this.commandChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async stopSong(songId: string): Promise<void> {
+    await this.command(async () => {
+      if (this.isCurrent(songId)) await this.player.stop();
+    });
+  }
+
+  private async waitForStart(
+    songId: string,
+    timeoutMs = 12000,
+  ): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      if ((await getPlayerState()) === "playing") return true;
-      await sleep(400);
+    while (this.isCurrent(songId) && Date.now() < deadline) {
+      if ((await this.player.playerState()) === "playing")
+        return this.isCurrent(songId);
+      if (!this.isCurrent(songId)) return false;
+      await this.player.sleep(400);
     }
     return false;
   }
 
-  // Music.app queues the whole album when we open a music:// album URL, so it
-  // auto-advances to the next album track once the requested song ends — player
-  // state stays "playing" and the queue would stall until the album runs out.
-  // Resolve the real track end instead: watch the current track id each tick
-  // and stop Music.app the moment it changes, plus a hard stop just before the
-  // known duration so the next album track never reaches the speakers.
-  private async waitForTrackEnd(expectedTrackId: number | null): Promise<void> {
-    const duration = await getTrackDuration();
-    if (duration !== null) this.queue.updateProgress(0, duration);
+  // 앨범 자동 진행으로 다음 곡이 들리지 않도록 트랙 변경과 곡 끝을 감시해요.
+  private async waitForTrackEnd(
+    songId: string,
+    expectedTrackId: number | null,
+  ): Promise<void> {
+    const duration = await this.player.duration();
+    if (duration !== null) this.queue.updateProgress(0, duration, songId);
     const deadline =
       Date.now() +
       (duration !== null ? (duration + 15) * 1000 : 15 * 60 * 1000);
-    while (Date.now() < deadline) {
-      const position = await getPlayerPosition();
-      if (position !== null) {
-        this.queue.updateProgress(position, duration);
-      }
-      if ((await getPlayerState()) === "stopped") return;
+    while (this.isCurrent(songId) && Date.now() < deadline) {
+      const position = await this.player.position();
+      if (position !== null)
+        this.queue.updateProgress(position, duration, songId);
+      if ((await this.player.playerState()) === "stopped") return;
       if (expectedTrackId !== null) {
-        const id = await readCurrentTrackId();
+        const id = await this.player.currentTrackId();
         if (id !== null && id !== expectedTrackId) {
-          await this.stop();
+          await this.stopSong(songId);
           return;
         }
       }
@@ -263,13 +317,14 @@ export class PlaybackService {
         position !== null &&
         position >= duration - 0.15
       ) {
-        await this.stop();
+        await this.stopSong(songId);
         return;
       }
+      if (!this.isCurrent(songId)) return;
       const nearEnd =
         duration !== null && position !== null && position >= duration - 3;
-      await sleep(nearEnd ? 120 : 300);
+      await this.player.sleep(nearEnd ? 120 : 300);
     }
-    await this.stop();
+    await this.stopSong(songId);
   }
 }

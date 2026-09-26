@@ -1,21 +1,25 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { Drizzle } from "../../infra/db";
 import { history, nowPlaying, queue } from "../../infra/schema";
 import type { Song } from "../shared/types";
 
 export type StoredNowPlaying = { song: Song; startedAt: number };
+type Transaction = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
 
-// 서비스가 의존하는 저장소 포트. 테스트는 이 인터페이스를 흉내 낸 가짜를 주입한다.
+// 서비스가 의존하는 저장소 포트. 재생 전환은 각각 하나의 트랜잭션이에요.
 export interface QueueRepository {
   loadQueue(): Promise<Song[]>;
   loadHistory(): Promise<Song[]>;
   loadNowPlaying(): Promise<StoredNowPlaying | null>;
-  insertQueueSong(song: Song, position: number): Promise<void>;
+  insertQueueSong(song: Song): Promise<void>;
   removeQueueSong(id: string): Promise<void>;
   replaceQueuePositions(songs: Song[]): Promise<void>;
-  setNowPlaying(song: Song, startedAt: number): Promise<void>;
-  clearNowPlaying(): Promise<void>;
-  prependHistory(song: Song, max: number): Promise<void>;
+  takeAndStart(song: Song, startedAt: number): Promise<void>;
+  finishNowPlaying(
+    song: Song,
+    result: "done" | "failed",
+    max: number,
+  ): Promise<void>;
 }
 
 function parseSong(json: string): Song | null {
@@ -31,7 +35,7 @@ export class DrizzleQueueRepository implements QueueRepository {
 
   constructor(private readonly db: Drizzle) {}
 
-  // 연속 쓰기 사이에 순서가 뒤섞이지 않도록 직렬화한다 (fire-and-forget 저장 대응).
+  // 실패는 호출자에게 전달하되 다음 쓰기는 계속 처리해요.
   private serialize(task: () => Promise<void>): Promise<void> {
     const run = this.writeChain.then(task);
     this.writeChain = run.then(
@@ -72,18 +76,32 @@ export class DrizzleQueueRepository implements QueueRepository {
     return song ? { song, startedAt: row.startedAt } : null;
   }
 
-  insertQueueSong(song: Song, position: number): Promise<void> {
+  insertQueueSong(song: Song): Promise<void> {
     return this.serialize(async () => {
-      await this.db
-        .insert(queue)
-        .values({ id: song.id, data: JSON.stringify(song), position });
+      await this.db.insert(queue).values({
+        id: song.id,
+        data: JSON.stringify(song),
+        // 예전 버전이 남긴 위치 공백도 새 곡의 순서를 바꾸지 않아요.
+        position: sql`(select coalesce(max(${queue.position}), -1) + 1 from ${queue})`,
+      });
     });
   }
 
+  private async removeAndCompact(tx: Transaction, id: string): Promise<void> {
+    await tx.delete(queue).where(eq(queue.id, id));
+    const rows = await tx.select().from(queue).orderBy(asc(queue.position));
+    await tx.delete(queue);
+    if (rows.length > 0) {
+      await tx
+        .insert(queue)
+        .values(rows.map((row, position) => ({ ...row, position })));
+    }
+  }
+
   removeQueueSong(id: string): Promise<void> {
-    return this.serialize(async () => {
-      await this.db.delete(queue).where(eq(queue.id, id));
-    });
+    return this.serialize(() =>
+      this.db.transaction((tx) => this.removeAndCompact(tx, id)),
+    );
   }
 
   replaceQueuePositions(songs: Song[]): Promise<void> {
@@ -92,10 +110,10 @@ export class DrizzleQueueRepository implements QueueRepository {
         await tx.delete(queue);
         if (songs.length > 0) {
           await tx.insert(queue).values(
-            songs.map((song, index) => ({
+            songs.map((song, position) => ({
               id: song.id,
               data: JSON.stringify(song),
-              position: index,
+              position,
             })),
           );
         }
@@ -103,45 +121,44 @@ export class DrizzleQueueRepository implements QueueRepository {
     );
   }
 
-  setNowPlaying(song: Song, startedAt: number): Promise<void> {
-    return this.serialize(async () => {
-      await this.db
-        .insert(nowPlaying)
-        .values({ id: 1, data: JSON.stringify(song), startedAt })
-        .onConflictDoUpdate({
-          target: nowPlaying.id,
-          set: { data: JSON.stringify(song), startedAt },
-        });
-    });
+  takeAndStart(song: Song, startedAt: number): Promise<void> {
+    return this.serialize(() =>
+      this.db.transaction(async (tx) => {
+        await this.removeAndCompact(tx, song.id);
+        await tx
+          .insert(nowPlaying)
+          .values({ id: 1, data: JSON.stringify(song), startedAt });
+      }),
+    );
   }
 
-  clearNowPlaying(): Promise<void> {
-    return this.serialize(async () => {
-      await this.db.delete(nowPlaying).where(eq(nowPlaying.id, 1));
-    });
-  }
-
-  prependHistory(song: Song, max: number): Promise<void> {
-    return this.serialize(async () => {
-      const rows = await this.db
-        .select()
-        .from(history)
-        .orderBy(asc(history.position));
-      const existing = rows
-        .map((row) => parseSong(row.data))
-        .filter((s): s is Song => s !== null)
-        .slice(0, Math.max(0, max - 1));
-      const next = [song, ...existing];
-      await this.db.transaction(async (tx) => {
-        await tx.delete(history);
-        await tx.insert(history).values(
-          next.map((s, index) => ({
-            id: s.id,
-            data: JSON.stringify(s),
-            position: index,
-          })),
-        );
-      });
-    });
+  finishNowPlaying(
+    song: Song,
+    result: "done" | "failed",
+    max: number,
+  ): Promise<void> {
+    return this.serialize(() =>
+      this.db.transaction(async (tx) => {
+        if (result === "done") {
+          const rows = await tx
+            .select()
+            .from(history)
+            .orderBy(asc(history.position));
+          const existing = rows
+            .map((row) => parseSong(row.data))
+            .filter((stored): stored is Song => stored !== null)
+            .slice(0, Math.max(0, max - 1));
+          await tx.delete(history);
+          await tx.insert(history).values(
+            [song, ...existing].map((entry, position) => ({
+              id: entry.id,
+              data: JSON.stringify(entry),
+              position,
+            })),
+          );
+        }
+        await tx.delete(nowPlaying).where(eq(nowPlaying.id, 1));
+      }),
+    );
   }
 }

@@ -20,7 +20,7 @@ queueService.hydrate({
   nowPlaying: storedNowPlaying
     ? {
         song: storedNowPlaying.song,
-        startedAt: Date.now(),
+        startedAt: storedNowPlaying.startedAt,
         status: "playing",
         positionSec: 0,
         durationSec: null,
