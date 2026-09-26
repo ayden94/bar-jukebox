@@ -1,15 +1,15 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
 import { FluoFactory } from "@fluojs/runtime";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 
 import { createJukeboxModule } from "./app";
 import {
-  playbackService,
-  queueRepository,
-  queueService,
-  settingsRepository,
-  settingsService,
+    playbackService,
+    queueRepository,
+    queueService,
+    settingsRepository,
+    settingsService,
 } from "./domains/providers";
 import { initDatabase } from "./infra/db";
 
@@ -78,7 +78,6 @@ const app = await FluoFactory.create(AppModule, { adapter });
 
 await app.listen();
 
-console.log(`JUKEBOX_READY ${adapter.getServer()?.port}`);
 if (process.env.PLAYBACK_DISABLED !== "1") {
   playbackService.start().catch((e) => {
     console.error("playback loop crashed:", e);
