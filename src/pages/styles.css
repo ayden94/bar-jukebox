@@ -92,13 +92,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#root,
-#root > div {
+.guest {
   max-width: 560px;
   margin: 0 auto;
-}
-
-.guest {
   padding: env(safe-area-inset-top) 18px env(safe-area-inset-bottom);
   overflow-x: hidden;
   min-height: 100dvh;
@@ -752,6 +748,10 @@ input::placeholder {
   gap: 22px;
 }
 
+.admin-root .wrap > * {
+  min-width: 0;
+}
+
 @media (max-width: 760px) {
   .admin-root .wrap {
     grid-template-columns: 1fr;
@@ -795,14 +795,24 @@ input::placeholder {
   letter-spacing: 0.06em;
 }
 
+.admin-root .now > div {
+  min-width: 0;
+}
+
 .admin-root .now .title {
   font-size: 1rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-root .now .artist {
   font-size: 0.82rem;
   color: var(--sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-root .progress {
