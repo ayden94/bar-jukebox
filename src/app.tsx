@@ -17,21 +17,22 @@ import {
 } from "@fluojs/react";
 import { createReactViteAssetManifest } from "@fluojs/react/vite";
 import { IsString } from "@fluojs/validation";
-
 import { AdminController } from "./controllers/admin.controller";
 import { AdminTokenGuard } from "./controllers/admin-token.guard";
 import { GuestQueryDto } from "./controllers/dto";
 import { EventsController } from "./controllers/events.controller";
 import { JukeboxController } from "./controllers/jukebox.controller";
-import * as db from "./jukebox/db";
 import type { JukeboxDatabase } from "./jukebox/providers";
 import {
+  JukeboxBusToken,
   JukeboxDatabaseToken,
   JukeboxStateToken,
   jukeboxProviders,
+  MusicSearchToken,
+  PlaybackToken,
 } from "./jukebox/providers";
+import { SseBroker } from "./jukebox/sse-broker";
 import type { JukeboxStateStore } from "./jukebox/state";
-import { state } from "./jukebox/state";
 import {
   DeviceCookieMiddleware,
   deviceIdOf,
@@ -50,7 +51,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   const manifestResult = createReactViteAssetManifest({
     base: "/assets/",
     entries: {
-      client: "src/pages/entry-client.ts",
+      client: "src/pages/entry-client.tsx",
       server: "src/pages/entry-server.ts",
     },
     identifierPrefix: "jukebox-react-",
@@ -109,7 +110,9 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   }
 
   class AssetRequest {
-    @IsString() @FromPath("file") file = "";
+    @IsString()
+    @FromPath("file")
+    file = "";
   }
 
   @Controller("/assets")
@@ -146,6 +149,20 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     }
   }
 
+  // 도메인 싱글턴(providers.ts)은 여기 한 곳에만 등록하고 exports로 공유한다 — 중복 등록 경고 방지.
+  @Module({
+    providers: jukeboxProviders,
+    exports: [
+      JukeboxStateToken,
+      JukeboxDatabaseToken,
+      JukeboxBusToken,
+      MusicSearchToken,
+      PlaybackToken,
+      SseBroker,
+    ],
+  })
+  class JukeboxDomainModule {}
+
   @Module({
     controllers: [
       JukeboxController,
@@ -153,15 +170,13 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       EventsController,
       ViteAssetController,
     ],
-    providers: [...jukeboxProviders, AdminTokenGuard],
+    providers: [AdminTokenGuard],
     middleware: [DeviceCookieMiddleware],
     imports: [
+      JukeboxDomainModule,
       ReactModule.forRoot({
         controllers: [GuestPageRouter, AdminPageRouter],
-        providers: [
-          { provide: JukeboxDatabaseToken, useValue: db },
-          { provide: JukeboxStateToken, useValue: state },
-        ],
+        imports: [JukeboxDomainModule],
         renderPage,
       }),
     ],
