@@ -1,31 +1,35 @@
-import { emit } from "./bus";
-import type { JukeboxState, NowPlaying, Song } from "./types";
+import { emit } from "../shared/bus";
+import type { NowPlaying, Song } from "../shared/types";
+import type { QueueRepository } from "./queue.repository";
 
 const MAX_HISTORY = 50;
 
-export class JukeboxStateStore {
+export type QueueSnapshot = {
+  nowPlaying: NowPlaying | null;
+  queue: Song[];
+  history: Song[];
+};
+
+export class QueueService {
   private nowPlaying: NowPlaying | null = null;
   private queue: Song[] = [];
   private history: Song[] = [];
-  private requestsPaused = false;
-  private notice = "";
   private lastProgressSec = -1;
 
-  hydrate(snapshot: JukeboxState): void {
+  constructor(private readonly repository: QueueRepository) {}
+
+  // 부팅 복원 전용 — 저장을 일으키지 않는다.
+  hydrate(snapshot: QueueSnapshot): void {
     this.nowPlaying = snapshot.nowPlaying;
     this.queue = snapshot.queue;
     this.history = snapshot.history;
-    this.requestsPaused = snapshot.requestsPaused;
-    this.notice = snapshot.notice;
   }
 
-  snapshot(): JukeboxState {
+  snapshot(): QueueSnapshot {
     return {
       nowPlaying: this.nowPlaying ? { ...this.nowPlaying } : null,
       queue: [...this.queue],
       history: [...this.history],
-      requestsPaused: this.requestsPaused,
-      notice: this.notice,
     };
   }
 
@@ -39,31 +43,20 @@ export class JukeboxStateStore {
     return this.queue.some((song) => song.trackId === trackId);
   }
 
-  isRequestsPaused(): boolean {
-    return this.requestsPaused;
-  }
-
-  getNotice(): string {
-    return this.notice;
-  }
-
-  setRequestsPaused(paused: boolean): void {
-    this.requestsPaused = paused;
-    emit("mutate");
-  }
-
-  setNotice(notice: string): void {
-    this.notice = notice;
-    emit("mutate");
+  nowPlayingSong(): Song | null {
+    return this.nowPlaying?.song ?? null;
   }
 
   enqueue(song: Song): void {
     this.queue.push(song);
     emit("mutate");
+    this.persist(this.repository.insertQueueSong(song, this.queue.length - 1));
   }
 
   takeNext(): Song | null {
-    return this.queue.shift() ?? null;
+    const song = this.queue.shift() ?? null;
+    if (song) this.persist(this.repository.removeQueueSong(song.id));
+    return song;
   }
 
   setNowPlaying(song: Song): void {
@@ -76,10 +69,9 @@ export class JukeboxStateStore {
     };
     this.lastProgressSec = -1;
     emit("mutate");
-  }
-
-  nowPlayingSong(): Song | null {
-    return this.nowPlaying?.song ?? null;
+    this.persist(
+      this.repository.setNowPlaying(song, this.nowPlaying.startedAt),
+    );
   }
 
   updateProgress(positionSec: number, durationSec: number | null): void {
@@ -94,14 +86,19 @@ export class JukeboxStateStore {
   }
 
   finishNowPlaying(result: "done" | "failed"): void {
-    if (!this.nowPlaying) return;
+    const song = this.nowPlaying?.song;
+    if (!song) return;
     if (result === "done") {
-      this.history.unshift(this.nowPlaying.song);
+      this.history.unshift(song);
       if (this.history.length > MAX_HISTORY) this.history.pop();
     }
     this.nowPlaying = null;
     this.lastProgressSec = -1;
     emit("mutate");
+    if (result === "done") {
+      this.persist(this.repository.prependHistory(song, MAX_HISTORY));
+    }
+    this.persist(this.repository.clearNowPlaying());
   }
 
   removeFromQueue(id: string): boolean {
@@ -109,6 +106,7 @@ export class JukeboxStateStore {
     if (idx === -1) return false;
     this.queue.splice(idx, 1);
     emit("mutate");
+    this.persist(this.repository.removeQueueSong(id));
     return true;
   }
 
@@ -131,7 +129,10 @@ export class JukeboxStateStore {
     for (const remaining of map.values()) next.push(remaining);
     this.queue = next;
     emit("mutate");
+    this.persist(this.repository.replaceQueuePositions(next));
+  }
+
+  private persist(task: Promise<void>): void {
+    void task.catch((e) => console.error("queue persist failed:", e));
   }
 }
-
-export const state = new JukeboxStateStore();

@@ -6,7 +6,9 @@ export const PORT = Number(process.env.PORT ?? 5173);
 function detectLanIp(): string {
   for (const nets of Object.values(networkInterfaces())) {
     for (const net of nets ?? []) {
-      if (String(net.family) === "IPv4" && !net.internal) return net.address;
+      if (String(net.family) === "IPv4" && !net.internal) {
+        return net.address;
+      }
     }
   }
   return "localhost";

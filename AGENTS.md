@@ -12,8 +12,8 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 .
 ├── src/main.ts         # server boot: SQLite hydrate, client-manifest load, FluoFactory, playback loop
 ├── src/app.tsx         # JukeboxModule wiring: controllers, providers, middleware, React page routers
-├── src/controllers/    # HTTP surface: guest API, token-guarded admin API, SSE stream, DTOs
-├── src/jukebox/        # framework-agnostic domain: state store, drizzle/libsql persistence, osascript playback, search
+├── src/domains/        # domain layer: queue/table/settings/search/playback/events/admin as controller→service→repository; shared = bus/types/config
+├── src/infra/          # db.ts (libsql client) + schema.ts (drizzle schema, SCHEMA_DDL)
 ├── src/middleware/     # device identity cookie (bj_did)
 ├── src/pages/          # React UI: guest + admin sub-apps, SSR/hydration entries, shared hooks/theme
 ├── public/             # legacy pre-React HTML shells (copied to dist/client by Vite default publicDir)
@@ -24,15 +24,15 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Add/modify an API route | src/controllers/*.controller.ts | @Get/@Post + @RequestDto; DTO classes in dto.ts |
-| Queue/state rules | src/jukebox/state.ts | 1 song/device, no duplicate track, own-cancel-only |
-| Persistence / schema | src/jukebox/db.ts + schema.ts | drizzle-orm/libsql over @libsql/client (async); full snapshot rewritten in one transaction on every mutate |
-| Music playback | src/jukebox/playback.ts | osascript Music.app; mute → album-skip trick |
-| Song search | src/jukebox/search.ts | iTunes Search API → `music://` album URLs |
-| SSE realtime | src/controllers/events.controller.ts | bus "mutate"/"progress" → snapshot broadcast, 25s ping |
-| Admin auth | src/controllers/admin-token.guard.ts | x-admin-token header vs .env ADMIN_TOKEN |
+| Add/modify an API route | src/domains/<domain>/<domain>.controller.ts | @Get/@Post + @RequestDto; DTO in the domain's dto.ts |
+| Queue/state rules | src/domains/queue/queue.service.ts | 1 song/device, no duplicate track, own-cancel-only |
+| Persistence / schema | src/infra/ + src/domains/*/repository.ts | drizzle-orm/libsql over @libsql/client (async); incremental per-mutation writes via repositories |
+| Music playback | src/domains/playback/playback.service.ts | osascript Music.app; mute → album-skip trick |
+| Song search | src/domains/search/search.service.ts | iTunes Search API → `music://` album URLs |
+| SSE realtime | src/domains/events/events.controller.ts | bus "mutate"/"progress" → snapshot broadcast, 25s ping |
+| Admin auth | src/domains/admin/admin-token.guard.ts | x-admin-token header vs .env ADMIN_TOKEN |
 | Guest identity | src/middleware/device-cookie.middleware.ts | httpOnly cookie bj_did, 1 year |
-| DI tokens/providers | src/jukebox/providers.ts | singletons wrapped as fluo providers |
+| DI providers | src/domains/providers.ts | domain singletons wrapped as fluo providers |
 | UI data hooks | src/pages/hooks.ts | SSE snapshot + polling fallback, toast, infinite scroll |
 
 ## CODE MAP
@@ -40,31 +40,31 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 
 | Symbol | Type | Location | Refs | Role |
 |--------|------|----------|------|------|
-| state (JukeboxStateStore) | singleton | src/jukebox/state.ts | ~10 files | in-memory queue/history/now-playing + rules |
-| jukeboxProviders | const | src/jukebox/providers.ts | 4 files | DI token → singleton mapping |
-| startPlaybackLoop | fn | src/jukebox/playback.ts | main.ts | sequential Music.app playback loop |
-| loadState / saveSnapshot | fn | src/jukebox/db.ts | main.ts | SQLite restore / persist (async; writes serialized) |
-| onChange / emit | fn | src/jukebox/bus.ts | state, main, events ctrl | mutate/progress event bus |
-| searchMusic | fn | src/jukebox/search.ts | providers | iTunes search, music:// URL builder |
-| SseBroker | class | src/jukebox/sse-broker.ts | events ctrl | wakes all SSE waiters on change |
-| fetchArtwork | fn | src/jukebox/artwork.ts | jukebox ctrl | mzstatic-only artwork proxy cache |
+| queueService (QueueService) | singleton | src/domains/queue/queue.service.ts | ~6 files | in-memory queue/history/now-playing + rules; persists per mutation |
+| jukeboxProviders | const | src/domains/providers.ts | 4 files | domain singleton → fluo provider mapping |
+| PlaybackService.start | method | src/domains/playback/playback.service.ts | main.ts | sequential Music.app playback loop |
+| QueueRepository 등 레포지토리 | class | src/domains/*/repository.ts | services | incremental SQLite writes; queue writes serialized via writeChain |
+| onChange / emit | fn | src/domains/shared/bus.ts | services, events ctrl | mutate/progress event bus |
+| SearchService | class | src/domains/search/search.service.ts | search ctrl | iTunes search, music:// URL builder |
+| SseBroker | class | src/domains/events/sse-broker.ts | events ctrl | wakes all SSE waiters on change |
+| fetchArtwork | fn | src/domains/search/artwork.ts | search ctrl | mzstatic-only artwork proxy cache |
 | GuestPageRouter / AdminPageRouter | class | src/app.tsx | ReactModule | SSR pages at / and /admin |
 
 ## CONVENTIONS
 - fluo decorators on the server: @Module/@Inject/@Controller/@Router/@Get/@Post/@Delete/@Sse/@UseGuards; DTO classes validated via @IsXxx + @FromBody/@FromQuery/@FromCookie/@FromPath.
-- src/jukebox stays framework-agnostic pure TS; the framework sees it only through providers.ts tokens.
+- src/domains services/repositories stay framework-agnostic pure TS; only controllers and providers.ts import @fluojs/*.
 - File suffixes encode role: .controller.ts, .guard.ts, .middleware.ts, .test.ts colocated with source.
 - Strict TS: noUncheckedIndexedAccess, noImplicitOverride; Biome recommended preset, 2-space, noNonNullAssertion off.
 - User-facing strings, comments, test names, and README are Korean (polite "~해요" tone) — keep it.
-- bun:test with Korean test names; tests reset the shared state singleton via hydrate(emptyState()).
+- bun:test with Korean test names; service tests inject an in-memory repository fake, repository tests run against a real :memory: SQLite.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - NEVER inherit DTO classes: field metadata binds to the parent class — flatten fields instead (see dto.ts note).
-- Never import @fluojs/* inside src/jukebox/ — providers.ts is the only seam.
+- Never import @fluojs/* in src/domains service/repository files — controllers and providers.ts are the only seams.
 - @babel/core must stay v7 (v8 removes allowDeclareFields and breaks fluo's babel config); Babel 8 would require fluoDecoratorsPlugin({ babelConfigFile }) with a filesystem path — file:// URLs fail.
 - Never restart a now-playing song restored from SQLite after a server restart — the loop waits for it to end.
 - Never let guest devices hit Apple CDN directly; artwork goes through /api/artwork (mzstatic-only allowlist).
-- Never bypass the state rules in controllers — they live in state.ts and are test-enforced.
+- Never bypass the state rules in controllers — they live in queue.service.ts and are test-enforced.
 - Never commit jukebox.sqlite*, dist/, .env — gitignored runtime artifacts.
 
 ## UNIQUE STYLES
@@ -78,7 +78,7 @@ bun install
 bun run dev            # fluo dev
 bun run build          # vite client build, then vite server build (both required)
 bun start              # bun dist/server/main.js (needs client build first)
-bun test               # unit tests (bun:test, src/jukebox/*.test.ts)
+bun test               # unit tests (bun:test, src/domains/**/*.test.ts)
 bun run typecheck      # bunx tsc --noEmit
 bun run check          # bunx biome check src test-flow.ts
 ADMIN_TOKEN=<token> bun test-flow.ts   # live API flow vs running server
@@ -86,7 +86,7 @@ ADMIN_TOKEN=<token> bun test-flow.ts   # live API flow vs running server
 
 ## NOTES
 - Boot order: the client build must exist (dist/client/.vite/manifest.json) or main.ts throws.
-- Every state mutation emits bus "mutate" → main.ts persists the snapshot; restart restores the queue and waits out the in-flight song.
+- Every mutation persists through its domain repository (fire-and-forget, writeChain-serialized); bus "mutate" now only wakes SSE. Restart restores the queue and waits out the in-flight song.
 - PORT comes from .env (default 5173); BASE_URL (or LAN-IP autodetect) is baked into printed QR URLs — changing the host invalidates printed QRs; fixed hostname (mDNS) recommended.
 - public/*.html are the legacy pre-React shells still copied into dist/client; the live app serves React documents instead.
 - docs/plan-cloud.md fixes a hard constraint for the future SaaS track: Apple Music cannot play from a cloud server — playback must stay on a venue-local device.

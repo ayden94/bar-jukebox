@@ -21,6 +21,7 @@ export type NowPlaying = {
   durationSec: number | null;
 };
 
+// /api/state·SSE 페이로드 모양. 도메인 서비스들이 합쳐진 전체 상태다.
 export type JukeboxState = {
   nowPlaying: NowPlaying | null;
   queue: Song[];

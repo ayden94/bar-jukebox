@@ -5,19 +5,21 @@ import {
   Sse,
   type SseMessage,
 } from "@fluojs/http";
-
-import type { JukeboxBus } from "../jukebox/providers";
-import { JukeboxBusToken, JukeboxStateToken } from "../jukebox/providers";
-import { SseBroker } from "../jukebox/sse-broker";
-import type { JukeboxStateStore } from "../jukebox/state";
+import type { JukeboxBus } from "../providers";
+import { JukeboxBusToken } from "../providers";
+import { QueueService } from "../queue/queue.service";
+import { SettingsService } from "../settings/settings.service";
+import { composeState } from "../shared/state-view";
+import { SseBroker } from "./sse-broker";
 
 const PING_INTERVAL_MS = 25000;
 
-@Inject(JukeboxStateToken, SseBroker, JukeboxBusToken)
+@Inject(QueueService, SettingsService, SseBroker, JukeboxBusToken)
 @Controller()
 export class EventsController {
   constructor(
-    private readonly state: JukeboxStateStore,
+    private readonly queue: QueueService,
+    private readonly settings: SettingsService,
     private readonly broker: SseBroker,
     bus: JukeboxBus,
   ) {
@@ -28,7 +30,7 @@ export class EventsController {
   @Sse("/api/events")
   async *events(context: RequestContext): AsyncIterable<SseMessage<unknown>> {
     void context;
-    yield { event: "state", data: this.state.snapshot() };
+    yield { event: "state", data: composeState(this.queue, this.settings) };
     while (true) {
       const result = await Promise.race([
         this.broker.waitChange(),
@@ -39,7 +41,10 @@ export class EventsController {
       if (result === "ping") {
         yield { event: "ping", data: "" };
       } else {
-        yield { event: "state", data: this.state.snapshot() };
+        yield {
+          event: "state",
+          data: composeState(this.queue, this.settings),
+        };
       }
     }
   }

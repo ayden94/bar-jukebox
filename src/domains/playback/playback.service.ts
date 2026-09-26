@@ -1,5 +1,5 @@
-import { state } from "./state";
-import type { Song } from "./types";
+import type { QueueService } from "../queue/queue.service";
+import type { Song } from "../shared/types";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
@@ -75,7 +75,10 @@ async function getVolume(): Promise<number> {
 
 async function setVolume(v: number): Promise<void> {
   await osa(
-    `tell application "Music" to set sound volume to ${Math.max(0, Math.min(100, v))}`,
+    `tell application "Music" to set sound volume to ${Math.max(
+      0,
+      Math.min(100, v),
+    )}`,
   );
 }
 
@@ -167,85 +170,95 @@ export async function playSong(song: Song): Promise<void> {
   });
 }
 
-export async function stopPlayback(): Promise<void> {
-  await osa('tell application "Music" to stop');
-}
+export class PlaybackService {
+  constructor(private readonly queue: QueueService) {}
 
-async function waitForStart(timeoutMs = 12000): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if ((await getPlayerState()) === "playing") return true;
-    await sleep(400);
+  async stop(): Promise<void> {
+    await osa('tell application "Music" to stop');
   }
-  return false;
-}
 
-// Music.app queues the whole album when we open a music:// album URL, so it
-// auto-advances to the next album track once the requested song ends — player
-// state stays "playing" and the queue would stall until the album runs out.
-// Resolve the real track end instead: watch the current track id each tick
-// and stop Music.app the moment it changes, plus a hard stop just before the
-// known duration so the next album track never reaches the speakers.
-async function waitForTrackEnd(expectedTrackId: number | null): Promise<void> {
-  const duration = await getTrackDuration();
-  if (duration !== null) state.updateProgress(0, duration);
-  while (true) {
-    const position = await getPlayerPosition();
-    if (position !== null) state.updateProgress(position, duration);
-    if ((await getPlayerState()) === "stopped") return;
-    if (expectedTrackId !== null) {
-      const id = await readCurrentTrackId();
-      if (id !== null && id !== expectedTrackId) {
-        await stopPlayback();
+  async start(): Promise<void> {
+    // A song restored from SQLite after a server restart is already playing in
+    // Music.app — do not restart it, just wait for it to finish.
+    if (this.queue.nowPlayingSong()) {
+      console.log("resuming restored now-playing: waiting for it to end");
+      await this.waitForTrackEnd(await readCurrentTrackId());
+      this.queue.finishNowPlaying("done");
+    }
+    while (true) {
+      const song = this.queue.takeNext();
+      if (!song) {
+        await sleep(1000);
+        continue;
+      }
+      this.queue.setNowPlaying(song);
+      console.log(
+        `\u25b6 playing: ${song.trackName} \u2014 ${song.artistName} (by ${song.requestedBy})`,
+      );
+
+      try {
+        await playSong(song);
+      } catch (e) {
+        console.error("playSong failed:", e);
+        this.queue.finishNowPlaying("failed");
+        continue;
+      }
+
+      const started = await this.waitForStart(12000);
+      if (!started) {
+        console.error(`\u2717 failed to start playback: ${song.trackName}`);
+        this.queue.finishNowPlaying("failed");
+        continue;
+      }
+
+      await this.waitForTrackEnd(await readCurrentTrackId());
+      this.queue.finishNowPlaying("done");
+      console.log(`\u25a0 finished: ${song.trackName}`);
+    }
+  }
+
+  private async waitForStart(timeoutMs = 12000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if ((await getPlayerState()) === "playing") return true;
+      await sleep(400);
+    }
+    return false;
+  }
+
+  // Music.app queues the whole album when we open a music:// album URL, so it
+  // auto-advances to the next album track once the requested song ends — player
+  // state stays "playing" and the queue would stall until the album runs out.
+  // Resolve the real track end instead: watch the current track id each tick
+  // and stop Music.app the moment it changes, plus a hard stop just before the
+  // known duration so the next album track never reaches the speakers.
+  private async waitForTrackEnd(expectedTrackId: number | null): Promise<void> {
+    const duration = await getTrackDuration();
+    if (duration !== null) this.queue.updateProgress(0, duration);
+    while (true) {
+      const position = await getPlayerPosition();
+      if (position !== null) {
+        this.queue.updateProgress(position, duration);
+      }
+      if ((await getPlayerState()) === "stopped") return;
+      if (expectedTrackId !== null) {
+        const id = await readCurrentTrackId();
+        if (id !== null && id !== expectedTrackId) {
+          await this.stop();
+          return;
+        }
+      }
+      if (
+        duration !== null &&
+        position !== null &&
+        position >= duration - 0.15
+      ) {
+        await this.stop();
         return;
       }
+      const nearEnd =
+        duration !== null && position !== null && position >= duration - 3;
+      await sleep(nearEnd ? 120 : 300);
     }
-    if (duration !== null && position !== null && position >= duration - 0.15) {
-      await stopPlayback();
-      return;
-    }
-    const nearEnd =
-      duration !== null && position !== null && position >= duration - 3;
-    await sleep(nearEnd ? 120 : 300);
-  }
-}
-
-export async function startPlaybackLoop(): Promise<void> {
-  // A song restored from SQLite after a server restart is already playing in
-  // Music.app — do not restart it, just wait for it to finish.
-  if (state.nowPlayingSong()) {
-    console.log("resuming restored now-playing: waiting for it to end");
-    await waitForTrackEnd(await readCurrentTrackId());
-    state.finishNowPlaying("done");
-  }
-  while (true) {
-    const song = state.takeNext();
-    if (!song) {
-      await sleep(1000);
-      continue;
-    }
-    state.setNowPlaying(song);
-    console.log(
-      `\u25b6 playing: ${song.trackName} \u2014 ${song.artistName} (by ${song.requestedBy})`,
-    );
-
-    try {
-      await playSong(song);
-    } catch (e) {
-      console.error("playSong failed:", e);
-      state.finishNowPlaying("failed");
-      continue;
-    }
-
-    const started = await waitForStart(12000);
-    if (!started) {
-      console.error(`\u2717 failed to start playback: ${song.trackName}`);
-      state.finishNowPlaying("failed");
-      continue;
-    }
-
-    await waitForTrackEnd(await readCurrentTrackId());
-    state.finishNowPlaying("done");
-    console.log(`\u25a0 finished: ${song.trackName}`);
   }
 }

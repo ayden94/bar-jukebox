@@ -14,8 +14,9 @@ export async function fetchArtwork(rawUrl: string): Promise<ArtworkResult> {
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" || !ALLOWED_HOST.test(url.hostname))
+  if (url.protocol !== "https:" || !ALLOWED_HOST.test(url.hostname)) {
     return null;
+  }
 
   const hit = cache.get(rawUrl);
   if (hit) return hit;

@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from "@fluojs/http";
 
-import { ADMIN_TOKEN } from "../jukebox/config";
+import { ADMIN_TOKEN } from "../shared/config";
 
 /** /api/admin/* 공통 가드: x-admin-token 헤더를 .env의 ADMIN_TOKEN과 대조한다. */
 export class AdminTokenGuard implements Guard {

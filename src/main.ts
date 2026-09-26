@@ -4,23 +4,32 @@ import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
 import { FluoFactory } from "@fluojs/runtime";
 
 import { createJukeboxModule } from "./app";
-import { onChange } from "./jukebox/bus";
-import * as db from "./jukebox/db";
-import { startPlaybackLoop } from "./jukebox/playback";
-import { state } from "./jukebox/state";
+import {
+  playbackService,
+  queueRepository,
+  queueService,
+  settingsRepository,
+  settingsService,
+} from "./domains/providers";
+import { initDatabase } from "./infra/db";
 
 // 재시작 시 SQLite에서 상태 복원 (큐/히스토리/재생중/설정)
-await db.initDatabase();
-state.hydrate(await db.loadState());
-
-// 상태 변경(mutate)을 SQLite에 저장. SSE 브로드캐스트는 events.controller가 수행.
-onChange((event) => {
-  if (event === "mutate") {
-    void db
-      .saveSnapshot(state.snapshot())
-      .catch((e) => console.error("snapshot save failed:", e));
-  }
+await initDatabase();
+const storedNowPlaying = await queueRepository.loadNowPlaying();
+queueService.hydrate({
+  nowPlaying: storedNowPlaying
+    ? {
+        song: storedNowPlaying.song,
+        startedAt: Date.now(),
+        status: "playing",
+        positionSec: 0,
+        durationSec: null,
+      }
+    : null,
+  queue: await queueRepository.loadQueue(),
+  history: await queueRepository.loadHistory(),
 });
+settingsService.hydrate(await settingsRepository.load());
 
 async function loadClientManifest(): Promise<unknown> {
   const candidates = [
@@ -64,4 +73,6 @@ const app = await FluoFactory.create(AppModule, {
 
 await app.listen();
 
-startPlaybackLoop().catch((e) => console.error("playback loop crashed:", e));
+playbackService
+  .start()
+  .catch((e) => console.error("playback loop crashed:", e));

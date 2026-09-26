@@ -18,23 +18,21 @@ import {
 } from "@fluojs/react";
 import { createReactViteAssetManifest } from "@fluojs/react/vite";
 import { IsString } from "@fluojs/validation";
-import { AdminController } from "./controllers/admin.controller";
-import { AdminTokenGuard } from "./controllers/admin-token.guard";
-import { GuestQueryDto } from "./controllers/dto";
-import { EventsController } from "./controllers/events.controller";
-import { JukeboxController } from "./controllers/jukebox.controller";
-import { database as jukeboxDrizzle, libsqlClient } from "./jukebox/db";
-import type { JukeboxDatabase } from "./jukebox/providers";
-import {
-  JukeboxBusToken,
-  JukeboxDatabaseToken,
-  JukeboxStateToken,
-  jukeboxProviders,
-  MusicSearchToken,
-  PlaybackToken,
-} from "./jukebox/providers";
-import { SseBroker } from "./jukebox/sse-broker";
-import type { JukeboxStateStore } from "./jukebox/state";
+import { AdminController } from "./domains/admin/admin.controller";
+import { AdminTokenGuard } from "./domains/admin/admin-token.guard";
+import { EventsController } from "./domains/events/events.controller";
+import { SseBroker } from "./domains/events/sse-broker";
+import { PlaybackService } from "./domains/playback/playback.service";
+import { JukeboxBusToken, jukeboxProviders } from "./domains/providers";
+import { QueueController } from "./domains/queue/queue.controller";
+import { QueueService } from "./domains/queue/queue.service";
+import { SearchController } from "./domains/search/search.controller";
+import { SearchService } from "./domains/search/search.service";
+import { SettingsService } from "./domains/settings/settings.service";
+import { GuestQueryDto } from "./domains/table/dto";
+import { TableController } from "./domains/table/table.controller";
+import { TableService } from "./domains/table/table.service";
+import { type Drizzle, database, libsqlClient } from "./infra/db";
 import {
   DeviceCookieMiddleware,
   deviceIdOf,
@@ -42,13 +40,10 @@ import {
 import { AdminDocument } from "./pages/admin";
 import { GuestDocument } from "./pages/guest";
 
-type JukeboxDrizzle = typeof jukeboxDrizzle;
 type JukeboxDrizzleTxOptions = NonNullable<
-  Parameters<JukeboxDrizzle["transaction"]>[1]
+  Parameters<Drizzle["transaction"]>[1]
 >;
-type JukeboxDrizzleTx = Parameters<
-  Parameters<JukeboxDrizzle["transaction"]>[0]
->[0];
+type JukeboxDrizzleTx = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
 
 export type CreateJukeboxModuleOptions = {
   readonly clientDirectory: URL;
@@ -78,13 +73,10 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   const renderPage: ReactPageRenderer = (page) =>
     createReactServerEntry(page, assets.hydrationOptions);
 
-  @Inject(JukeboxDatabaseToken, JukeboxStateToken)
+  @Inject(TableService)
   @Router()
   class GuestPageRouter {
-    constructor(
-      private readonly jukeboxDb: JukeboxDatabase,
-      private readonly jukeboxState: JukeboxStateStore,
-    ) {}
+    constructor(private readonly tableService: TableService) {}
 
     @Path("/")
     @RequestDto(GuestQueryDto)
@@ -92,8 +84,8 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       void deviceIdOf(context);
       const tableId = Number(dto.t);
       const table =
-        dto.t && dto.k ? await this.jukeboxDb.getTable(tableId) : null;
-      if (!table || table.secret !== dto.k) {
+        dto.t && dto.k ? await this.tableService.verify(tableId, dto.k) : null;
+      if (!table) {
         return (
           <GuestDocument
             error={
@@ -105,7 +97,6 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
           />
         );
       }
-      void this.jukeboxState;
       return (
         <GuestDocument stylesheets={assets.css} tableLabel={table.label} />
       );
@@ -164,30 +155,31 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   // drizzle 핸들을 fluo 라이프사이클에 연결한다 (앱 종료 시 libsql close).
   @Module({
     imports: [
-      DrizzleModule.forRoot<
-        JukeboxDrizzle,
-        JukeboxDrizzleTx,
-        JukeboxDrizzleTxOptions
-      >({
-        database: jukeboxDrizzle,
-        dispose: () => libsqlClient.close(),
-      }),
+      DrizzleModule.forRoot<Drizzle, JukeboxDrizzleTx, JukeboxDrizzleTxOptions>(
+        {
+          database,
+          dispose: () => libsqlClient.close(),
+        },
+      ),
     ],
     providers: jukeboxProviders,
     exports: [
-      JukeboxStateToken,
-      JukeboxDatabaseToken,
-      JukeboxBusToken,
-      MusicSearchToken,
-      PlaybackToken,
+      QueueService,
+      SettingsService,
+      TableService,
+      SearchService,
+      PlaybackService,
       SseBroker,
+      JukeboxBusToken,
     ],
   })
   class JukeboxDomainModule {}
 
   @Module({
     controllers: [
-      JukeboxController,
+      QueueController,
+      TableController,
+      SearchController,
       AdminController,
       EventsController,
       ViteAssetController,

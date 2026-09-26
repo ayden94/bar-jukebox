@@ -4,7 +4,7 @@ import {
   type TrackNavigator,
   type VolumeController,
   withMutedVolume,
-} from "./playback";
+} from "./playback.service";
 
 test("waits for each Music.app transition before advancing again", async () => {
   let currentTrack = 1;
@@ -18,8 +18,9 @@ test("waits for each Music.app transition before advancing again", async () => {
       return currentTrack;
     },
     nextTrack: async () => {
-      if (transitionPending)
+      if (transitionPending) {
         throw new Error("next track called before transition settled");
+      }
       transitionPending = true;
     },
   };
