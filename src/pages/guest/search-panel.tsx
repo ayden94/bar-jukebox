@@ -1,6 +1,6 @@
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useInfiniteScroll } from "../hooks";
-import { art, fmt, SEARCH_PAGE } from "../shared";
+import { apiErrorMessage, art, fmt, SEARCH_PAGE } from "../shared";
 import type { SearchHit } from "../types";
 
 type SearchPanelProps = {
@@ -23,6 +23,16 @@ export function SearchPanel({
   const [searchedTerm, setSearchedTerm] = useState("");
   const [requestedTrack, setRequestedTrack] = useState<string | null>(null);
   const searchTimer = useRef<number | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
+  const searchVersion = useRef(0);
+  useEffect(
+    () => () => {
+      ++searchVersion.current;
+      searchAbort.current?.abort();
+      window.clearTimeout(searchTimer.current ?? undefined);
+    },
+    [],
+  );
   const requestPending = useRef(false);
   const moreRef = useInfiniteScroll(
     visibleCount < results.length,
@@ -33,36 +43,56 @@ export function SearchPanel({
   const doSearch = async (termArg?: string) => {
     const term = (termArg ?? q).trim();
     window.clearTimeout(searchTimer.current ?? undefined);
+    searchAbort.current?.abort();
+    const version = ++searchVersion.current;
     if (!term) {
       setResults([]);
+      setSearching(false);
+      setSearchedTerm("");
       return;
     }
+    const controller = new AbortController();
+    searchAbort.current = controller;
     setSearching(true);
     setSearchedTerm("");
     setResults([]);
     try {
-      const r = await (
-        await fetch(`/api/search?q=${encodeURIComponent(term)}`)
-      ).json();
-      if (r.error) {
-        showToast(r.error, "err");
+      const response = await fetch(
+        `/api/search?q=${encodeURIComponent(term)}`,
+        { signal: controller.signal },
+      );
+      const result = await response.json();
+      if (version !== searchVersion.current) return;
+      if (!response.ok || result.error) {
+        showToast(
+          apiErrorMessage(result, `검색 실패 (HTTP ${response.status})`),
+          "err",
+        );
         return;
       }
-      setResults(r.hits);
+      setResults(result.hits ?? []);
       setSearchedTerm(term);
       setVisibleCount(SEARCH_PAGE);
     } catch {
-      showToast("검색 중 오류가 발생했어요", "err");
+      if (version === searchVersion.current) {
+        showToast("검색 중 오류가 발생했어요", "err");
+      }
     } finally {
-      setSearching(false);
+      if (version === searchVersion.current) setSearching(false);
     }
   };
 
   const onSearchInput = (value: string) => {
     setQ(value);
     setSearchedTerm("");
+    setSearching(false);
+    setResults([]);
+    ++searchVersion.current;
+    searchAbort.current?.abort();
     window.clearTimeout(searchTimer.current ?? undefined);
-    searchTimer.current = window.setTimeout(() => doSearch(value), 450);
+    if (value.trim()) {
+      searchTimer.current = window.setTimeout(() => doSearch(value), 450);
+    }
   };
 
   const request = async (hit: SearchHit) => {
@@ -82,7 +112,7 @@ export function SearchPanel({
       });
       const j = await r.json();
       if (!r.ok) {
-        showToast(j.error || "신청 실패", "err");
+        showToast(apiErrorMessage(j, "신청 실패"), "err");
         return;
       }
       showToast("신청됐어요. 순서가 오면 틀어줄게요", "ok");
@@ -145,7 +175,11 @@ export function SearchPanel({
             <img src={art(h.artworkUrl)} alt="" />
             <div className="info">
               <div className="t">{h.trackName}</div>
-              <div className="a">{`${h.artistName}${h.durationSec ? ` · ${fmt(h.durationSec)}` : ""}`}</div>
+              <div className="a">
+                {`${h.artistName}${
+                  h.durationSec ? ` · ${fmt(h.durationSec)}` : ""
+                }`}
+              </div>
             </div>
             <button
               type="button"

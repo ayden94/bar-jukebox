@@ -5,9 +5,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { useJukeboxSnapshot } from "../hooks";
+import { apiErrorMessage } from "../shared";
 import { useTheme } from "../theme";
 import { ThemeSegment } from "../theme-segment";
 import type { Snapshot } from "../types";
@@ -52,16 +54,34 @@ export function AdminSession({
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const { snap, refresh } = useJukeboxSnapshot(authed);
+  const pending = useRef(new Set<string>());
+  const loginPending = useRef(false);
 
   const api = useCallback(
-    (path: string, opts: RequestInit = {}) =>
-      fetch(path, {
+    async (path: string, opts: RequestInit = {}) => {
+      const res = await fetch(path, {
         ...opts,
         headers: {
           "Content-Type": "application/json",
           "x-admin-token": token,
         },
-      }),
+      });
+      if (res.status === 401) {
+        window.localStorage.removeItem("bj_admin");
+        setToken("");
+        setAuthed(false);
+      }
+      if (!res.ok) {
+        const data = await res
+          .clone()
+          .json()
+          .catch(() => null);
+        throw new Error(
+          apiErrorMessage(data, `요청 실패 (HTTP ${res.status})`),
+        );
+      }
+      return res;
+    },
     [token],
   );
 
@@ -72,12 +92,14 @@ export function AdminSession({
         : (window.localStorage.getItem("bj_admin") ?? "");
     if (!saved) return;
     setToken(saved);
-    fetch("/api/admin/tables", { headers: { "x-admin-token": saved } }).then(
-      (r) => {
+    fetch("/api/admin/tables", { headers: { "x-admin-token": saved } })
+      .then((r) => {
         if (r.ok) setAuthed(true);
-        else window.localStorage.removeItem("bj_admin");
-      },
-    );
+        else if (r.status === 401) {
+          window.localStorage.removeItem("bj_admin");
+        } else window.alert(`관리자 연결 실패 (HTTP ${r.status})`);
+      })
+      .catch(() => window.alert("관리자 연결에 실패했어요"));
   }, []);
 
   // 해시(#qr) 시절 북마크를 실제 라우트로 넘긴다.
@@ -88,24 +110,49 @@ export function AdminSession({
   }, []);
 
   const login = async () => {
-    const res = await fetch("/api/admin/tables", {
-      headers: { "x-admin-token": tokenInput },
-    });
-    if (res.status === 401) {
-      window.alert("비밀번호가 틀렸어요");
-      return;
+    if (loginPending.current) return;
+    loginPending.current = true;
+    try {
+      const res = await fetch("/api/admin/tables", {
+        headers: { "x-admin-token": tokenInput },
+      });
+      if (!res.ok) {
+        window.alert(
+          res.status === 401
+            ? "비밀번호가 틀렸어요"
+            : `로그인 실패 (HTTP ${res.status})`,
+        );
+        return;
+      }
+      window.localStorage.setItem("bj_admin", tokenInput);
+      setToken(tokenInput);
+      setAuthed(true);
+    } catch {
+      window.alert("관리자 연결에 실패했어요");
+    } finally {
+      loginPending.current = false;
     }
-    window.localStorage.setItem("bj_admin", tokenInput);
-    setToken(tokenInput);
-    setAuthed(true);
   };
 
   const act = async (path: string, body?: unknown, method = "POST") => {
-    await api(path, {
-      method,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    refresh();
+    const key = `${method} ${path} ${JSON.stringify(body)}`;
+    if (pending.current.has(key)) return;
+    pending.current.add(key);
+    try {
+      const res = await api(path, {
+        method,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.ok === false) {
+        throw new Error(apiErrorMessage(data, "요청을 완료하지 못했어요"));
+      }
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "네트워크 오류");
+    } finally {
+      pending.current.delete(key);
+    }
   };
 
   if (!authed) {

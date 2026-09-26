@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { apiErrorMessage } from "../shared";
 import type { TableRow } from "../types";
 
 type QrTabProps = {
@@ -20,57 +21,84 @@ export function QrTab({ api }: QrTabProps) {
   >({});
   const [qrOpenId, setQrOpenId] = useState<number | null>(null);
   const [printCards, setPrintCards] = useState<PrintCard[]>([]);
+  const pending = useRef(new Set<string>());
+  const run = async (key: string, action: () => Promise<void>) => {
+    if (pending.current.has(key)) return;
+    pending.current.add(key);
+    try {
+      await action();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "네트워크 오류");
+    } finally {
+      pending.current.delete(key);
+    }
+  };
 
   const loadTables = useCallback(async () => {
-    try {
-      const r = await api("/api/admin/tables");
-      if (r.ok) setTables((await r.json()).tables ?? []);
-    } catch {}
+    const r = await api("/api/admin/tables");
+    setTables((await r.json()).tables ?? []);
   }, [api]);
 
   useEffect(() => {
-    loadTables();
+    loadTables().catch((error) =>
+      window.alert(error instanceof Error ? error.message : "네트워크 오류"),
+    );
   }, [loadTables]);
 
-  const createTable = async () => {
-    const input = document.getElementById("table-label") as HTMLInputElement;
-    await api("/api/admin/tables", {
-      method: "POST",
-      body: JSON.stringify({ label: input.value.trim() }),
+  const createTable = () =>
+    run("create", async () => {
+      const input = document.getElementById("table-label") as HTMLInputElement;
+      const label = input.value.trim();
+      const data = await (
+        await api("/api/admin/tables", {
+          method: "POST",
+          body: JSON.stringify({ label }),
+        })
+      ).json();
+      if (data.ok === false) {
+        throw new Error(apiErrorMessage(data, "테이블을 추가하지 못했어요"));
+      }
+      if (input.value.trim() === label) input.value = "";
+      await loadTables();
     });
-    input.value = "";
-    loadTables();
-  };
 
-  const toggleQr = async (id: number) => {
-    if (qrOpenId === id) {
-      setQrOpenId(null);
-      return;
-    }
-    if (!qrCache[id]) {
-      const j = await (await api(`/api/admin/tables/${id}/qr`)).json();
-      setQrCache((c) => ({ ...c, [id]: { svg: j.svg, url: j.url } }));
-    }
-    setQrOpenId(id);
-  };
+  const toggleQr = (id: number) =>
+    run(`qr-${id}`, async () => {
+      if (qrOpenId === id) {
+        setQrOpenId(null);
+        return;
+      }
+      if (!qrCache[id]) {
+        const j = await (await api(`/api/admin/tables/${id}/qr`)).json();
+        setQrCache((c) => ({ ...c, [id]: { svg: j.svg, url: j.url } }));
+      }
+      setQrOpenId(id);
+    });
 
-  const removeTable = async (id: number) => {
-    if (!window.confirm("테이블을 삭제할까요? (인쇄된 QR도 무효가 돼요)")) {
-      return;
-    }
-    await api(`/api/admin/tables/${id}`, { method: "DELETE" });
-    loadTables();
-  };
+  const removeTable = (id: number) =>
+    run(`remove-${id}`, async () => {
+      if (!window.confirm("테이블을 삭제할까요? (인쇄된 QR도 무효가 돼요)")) {
+        return;
+      }
+      const data = await (
+        await api(`/api/admin/tables/${id}`, { method: "DELETE" })
+      ).json();
+      if (data.ok === false) {
+        throw new Error(apiErrorMessage(data, "테이블을 삭제하지 못했어요"));
+      }
+      await loadTables();
+    });
 
-  const printAll = async () => {
-    if (!tables.length) return;
-    const cards: PrintCard[] = [];
-    for (const t of tables) {
-      const j = await (await api(`/api/admin/tables/${t.id}/qr`)).json();
-      cards.push({ label: t.label, svg: j.svg, url: j.url });
-    }
-    setPrintCards(cards);
-  };
+  const printAll = () =>
+    run("print", async () => {
+      if (!tables.length) return;
+      const cards: PrintCard[] = [];
+      for (const t of tables) {
+        const j = await (await api(`/api/admin/tables/${t.id}/qr`)).json();
+        cards.push({ label: t.label, svg: j.svg, url: j.url });
+      }
+      setPrintCards(cards);
+    });
 
   useEffect(() => {
     if (!printCards.length) return;
