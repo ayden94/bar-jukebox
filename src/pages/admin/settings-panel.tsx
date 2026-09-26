@@ -9,6 +9,7 @@ type SettingsPatch = {
 
 type SettingsPanelProps = {
   requestsPaused: boolean;
+  notice?: string;
   maxPerDevice: number;
   maxPerTable: number;
   onSave: (patch: SettingsPatch) => void;
@@ -16,11 +17,19 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({
   requestsPaused,
+  notice,
   maxPerDevice,
   maxPerTable,
   onSave,
 }: SettingsPanelProps) {
-  const [noticeInput, setNoticeInput] = useState("");
+  const [noticeInput, setNoticeInput] = useState(notice ?? "");
+  const [noticeDirty, setNoticeDirty] = useState(false);
+
+  useEffect(() => {
+    if (notice === undefined) return;
+    if (noticeDirty && notice === noticeInput) setNoticeDirty(false);
+    else if (!noticeDirty) setNoticeInput(notice);
+  }, [notice, noticeDirty, noticeInput]);
   const [deviceLimit, setDeviceLimit] = useState(String(maxPerDevice));
   const [tableLimit, setTableLimit] = useState(String(maxPerTable));
 
@@ -65,12 +74,19 @@ export function SettingsPanel({
           placeholder="손님 화면에 표시할 공지 (비우면 숨김)"
           maxLength={200}
           value={noticeInput}
-          onChange={(e) => setNoticeInput((e.target as HTMLInputElement).value)}
+          onChange={(e) => {
+            setNoticeDirty(true);
+            setNoticeInput((e.target as HTMLInputElement).value);
+          }}
         />
         <button
           className="btn"
           type="button"
-          onClick={() => onSave({ notice: noticeInput.trim() })}
+          onClick={() => {
+            const trimmed = noticeInput.trim();
+            setNoticeInput(trimmed);
+            onSave({ notice: trimmed });
+          }}
         >
           저장
         </button>

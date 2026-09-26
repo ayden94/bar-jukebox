@@ -1584,6 +1584,18 @@ input::placeholder {
   flex-shrink: 0;
 }
 
+@media (max-width: 1000px) {
+  .admin-root .settingrow:has(#limit-device) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-root .settingrow:has(#limit-device) .btn {
+    grid-column: 1 / -1;
+    white-space: nowrap;
+  }
+}
+
 .admin-root .note {
   font-size: 0.78rem;
   color: var(--admin-sub2);

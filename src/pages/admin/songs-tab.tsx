@@ -40,6 +40,7 @@ export function SongsTab({ snap, act }: SongsTabProps) {
         <h2>운영 설정</h2>
         <SettingsPanel
           requestsPaused={snap?.requestsPaused ?? false}
+          notice={snap?.notice}
           maxPerDevice={snap?.maxPerDevice ?? 1}
           maxPerTable={snap?.maxPerTable ?? 5}
           onSave={(patch) => act("/api/admin/settings", patch)}

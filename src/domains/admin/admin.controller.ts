@@ -13,7 +13,10 @@ import { PlaybackService } from "../playback/playback.service";
 import { CancelDto, ReorderDto, SongInputDto } from "../queue/dto";
 import { QueueService } from "../queue/queue.service";
 import { SettingsDto } from "../settings/dto";
-import { SettingsService } from "../settings/settings.service";
+import {
+  InvalidSettingsError,
+  SettingsService,
+} from "../settings/settings.service";
 import { BASE_URL } from "../shared/config";
 import { makeSong } from "../shared/song";
 import { TableIdDto, TableLabelDto } from "../table/dto";
@@ -124,35 +127,24 @@ export class AdminController {
 
   @Post("/settings")
   @RequestDto(SettingsDto)
-  settings(dto: SettingsDto) {
-    if (typeof dto?.requestsPaused === "boolean") {
-      this.settingsService.setRequestsPaused(dto.requestsPaused);
-    }
-    if (typeof dto?.notice === "string") {
-      if (dto.notice.length > 200) {
-        throw new BadRequestException("공지는 200자 이내");
+  async settings(dto: SettingsDto) {
+    try {
+      await this.settingsService.update({
+        ...(dto.requestsPaused === null
+          ? {}
+          : { requestsPaused: dto.requestsPaused }),
+        ...(dto.notice === null ? {} : { notice: dto.notice }),
+        ...(dto.maxPerDevice === null
+          ? {}
+          : { maxPerDevice: dto.maxPerDevice }),
+        ...(dto.maxPerTable === null ? {} : { maxPerTable: dto.maxPerTable }),
+      });
+    } catch (error) {
+      if (error instanceof InvalidSettingsError) {
+        throw new BadRequestException(error.message);
       }
-      this.settingsService.setNotice(dto.notice);
-    }
-    if (typeof dto?.maxPerDevice === "number") {
-      this.settingsService.setMaxPerDevice(
-        validateLimit(dto.maxPerDevice, "기기당 곡 수 제한"),
-      );
-    }
-    if (typeof dto?.maxPerTable === "number") {
-      this.settingsService.setMaxPerTable(
-        validateLimit(dto.maxPerTable, "테이블당 곡 수 제한"),
-      );
+      throw error;
     }
     return { ok: true };
   }
-}
-
-function validateLimit(value: number, label: string): number {
-  if (!Number.isInteger(value) || value < 0 || value > 99) {
-    throw new BadRequestException(
-      `${label}은(는) 0~99 사이여야 해요 (0은 무제한)`,
-    );
-  }
-  return value;
 }

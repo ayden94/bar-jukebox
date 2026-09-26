@@ -33,10 +33,20 @@ export class SettingsRepository {
     };
   }
 
-  async set(key: string, value: string): Promise<void> {
-    await this.db
-      .insert(settings)
-      .values({ key, value })
-      .onConflictDoUpdate({ target: settings.key, set: { value } });
+  async save(snapshot: SettingsSnapshot): Promise<void> {
+    const entries = [
+      ["requests_paused", snapshot.requestsPaused ? "1" : "0"],
+      ["notice", snapshot.notice],
+      ["max_per_device", String(snapshot.maxPerDevice)],
+      ["max_per_table", String(snapshot.maxPerTable)],
+    ] as const;
+    await this.db.transaction(async (tx) => {
+      for (const [key, value] of entries) {
+        await tx.insert(settings).values({ key, value }).onConflictDoUpdate({
+          target: settings.key,
+          set: { value },
+        });
+      }
+    });
   }
 }
