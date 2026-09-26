@@ -33,6 +33,14 @@ export function AdminDocument({ stylesheets, theme }: AdminDocumentProps) {
           <meta charSet="utf-8" />
           <meta content="width=device-width, initial-scale=1" name="viewport" />
           <title>주크박스 관리</title>
+          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+          <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/icon-32x32.png"
+          />
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
           {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 저장된 테마를 첫 페인트 전에 적용하는 고정 스크립트 */}
           <script dangerouslySetInnerHTML={{ __html: themeScript }} />
           {stylesheets.map((href) => (

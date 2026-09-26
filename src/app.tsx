@@ -158,6 +158,62 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     }
   }
 
+  const PUBLIC_FILES: Record<string, string> = {
+    "favicon.svg": "image/svg+xml",
+    "icon-32x32.png": "image/png",
+    "icon-16x16.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+  };
+
+  class PublicFileDto {}
+
+  async function servePublicFile(
+    file: string,
+    context: RequestContext,
+  ): Promise<Uint8Array> {
+    context.response.setHeader("Content-Type", PUBLIC_FILES[file] ?? "");
+    context.response.setHeader("Cache-Control", "public, max-age=86400");
+    try {
+      return await readFile(new URL(file, options.clientDirectory));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        throw new NotFoundException("File not found.");
+      }
+      throw error;
+    }
+  }
+
+  @Controller()
+  class PublicFileController {
+    @Get("/favicon.svg")
+    @RequestDto(PublicFileDto)
+    favicon(_dto: PublicFileDto, context: RequestContext) {
+      return servePublicFile("favicon.svg", context);
+    }
+
+    @Get("/icon-32x32.png")
+    @RequestDto(PublicFileDto)
+    icon32(_dto: PublicFileDto, context: RequestContext) {
+      return servePublicFile("icon-32x32.png", context);
+    }
+
+    @Get("/icon-16x16.png")
+    @RequestDto(PublicFileDto)
+    icon16(_dto: PublicFileDto, context: RequestContext) {
+      return servePublicFile("icon-16x16.png", context);
+    }
+
+    @Get("/apple-touch-icon.png")
+    @RequestDto(PublicFileDto)
+    appleTouch(_dto: PublicFileDto, context: RequestContext) {
+      return servePublicFile("apple-touch-icon.png", context);
+    }
+  }
+
   // 도메인 싱글턴(providers.ts)은 여기 한 곳에만 등록하고 exports로 공유한다 — 중복 등록 경고 방지.
   // drizzle 핸들을 fluo 라이프사이클에 연결한다 (앱 종료 시 libsql close).
   @Module({
@@ -190,6 +246,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       AdminController,
       EventsController,
       ViteAssetController,
+      PublicFileController,
     ],
     providers: [AdminTokenGuard],
     middleware: [DeviceCookieMiddleware],
