@@ -2,7 +2,12 @@ import {
   createReactRouteSnapshot,
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
-import { bakedTheme, themePreferenceFromCookie, themeScript } from "../theme";
+import {
+  bakedTheme,
+  THEME_COLORS,
+  themePreferenceFromCookie,
+  themeScript,
+} from "../theme";
 import { GuestApp } from "./guest-app";
 
 export type GuestDocumentProps = {
@@ -44,7 +49,13 @@ export function GuestDocument({
             content="width=device-width, initial-scale=1, viewport-fit=cover"
             name="viewport"
           />
-          <meta content="#000000" name="theme-color" />
+          <meta
+            content={
+              THEME_COLORS[bakedTheme(theme ?? themePreferenceFromCookie())]
+            }
+            name="theme-color"
+            suppressHydrationWarning={true}
+          />
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <title>바 주크박스</title>
           <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
