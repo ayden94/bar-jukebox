@@ -56,71 +56,108 @@ export function SettingsPanel({
   };
 
   return (
-    <div className="panel">
-      <div className="settingrow">
-        <span className="rowname">곡 신청</span>
+    <section
+      className="panel settings-panel"
+      aria-labelledby="settings-heading"
+    >
+      <div className="panel-head">
+        <h2 id="settings-heading">운영 설정</h2>
+      </div>
+      <div className="setting-group reception-setting">
+        <div>
+          <strong>
+            {requestsPaused
+              ? "곡 신청을 잠시 멈췄어요"
+              : "곡 신청을 받고 있어요"}
+          </strong>
+          <p className="note">바텐더는 언제든 곡을 추가할 수 있어요.</p>
+        </div>
         <button
-          className={requestsPaused ? "btn danger" : "btn okstate"}
+          className={`request-toggle${requestsPaused ? "" : " is-on"}`}
           type="button"
+          role="switch"
+          aria-checked={!requestsPaused}
+          aria-label="손님 곡 신청 받기"
           onClick={() => onSave({ requestsPaused: !requestsPaused })}
         >
-          {requestsPaused ? "일시중지 중" : "받는 중"}
+          <span className="toggle-track" aria-hidden="true">
+            <span />
+          </span>
         </button>
       </div>
-      <div className="settingrow">
-        <label htmlFor="notice-input">공지</label>
-        <input
+      <form
+        className="setting-group"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const trimmed = noticeInput.trim();
+          setNoticeInput(trimmed);
+          onSave({ notice: trimmed });
+        }}
+      >
+        <label className="field-label" htmlFor="notice-input">
+          손님에게 보낼 공지
+        </label>
+        <textarea
           id="notice-input"
-          placeholder="손님 화면에 표시할 공지 (비우면 숨김)"
+          placeholder="예: 오늘은 재즈와 함께해요"
+          rows={3}
           maxLength={200}
           value={noticeInput}
           onChange={(e) => {
             setNoticeDirty(true);
-            setNoticeInput((e.target as HTMLInputElement).value);
+            setNoticeInput(e.currentTarget.value);
           }}
         />
-        <button
-          className="btn"
-          type="button"
-          onClick={() => {
-            const trimmed = noticeInput.trim();
-            setNoticeInput(trimmed);
-            onSave({ notice: trimmed });
-          }}
-        >
-          저장
-        </button>
-      </div>
-      <div className="settingrow">
-        <label htmlFor="limit-device">기기당 최대</label>
-        <input
-          id="limit-device"
-          type="number"
-          min={0}
-          max={99}
-          inputMode="numeric"
-          value={deviceLimit}
-          onChange={(e) => setDeviceLimit((e.target as HTMLInputElement).value)}
-        />
-        <label htmlFor="limit-table">테이블당 최대</label>
-        <input
-          id="limit-table"
-          type="number"
-          min={0}
-          max={99}
-          inputMode="numeric"
-          value={tableLimit}
-          onChange={(e) => setTableLimit((e.target as HTMLInputElement).value)}
-        />
-        <button className="btn" type="button" onClick={saveLimits}>
-          저장
-        </button>
-      </div>
-      <div className="note">
-        신청을 일시중지하면 손님 화면에 안내가 표시되고 신청이 차단돼요.
-        바텐더의 곡 추가는 언제나 가능해요. 곡 수 제한은 재생중인 곡까지 합산해
-        세고, 0을 넣으면 무제한이에요.
-      </div>
-    </div>
+        <div className="setting-footer">
+          <span className="note">비워두면 공지를 숨겨요.</span>
+          <button className="btn ghost" type="submit">
+            공지 저장
+          </button>
+        </div>
+      </form>
+      <form
+        className="setting-group"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveLimits();
+        }}
+      >
+        <div className="field-label">신청 곡 수 제한</div>
+        <div className="limit-fields">
+          <div>
+            <label htmlFor="limit-device">기기당 최대</label>
+            <input
+              id="limit-device"
+              type="number"
+              min={0}
+              max={99}
+              inputMode="numeric"
+              required
+              value={deviceLimit}
+              onChange={(e) => setDeviceLimit(e.currentTarget.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="limit-table">테이블당 최대</label>
+            <input
+              id="limit-table"
+              type="number"
+              min={0}
+              max={99}
+              inputMode="numeric"
+              required
+              value={tableLimit}
+              onChange={(e) => setTableLimit(e.currentTarget.value)}
+            />
+          </div>
+        </div>
+        <p className="note">재생 중인 곡을 포함해요. 0은 무제한이에요.</p>
+        <div className="setting-footer">
+          <button className="btn ghost" type="submit">
+            제한 저장
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }

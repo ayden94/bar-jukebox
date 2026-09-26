@@ -14,7 +14,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
 
   return (
     <ul className="queue">
-      {queue.map((s) => (
+      {queue.map((s, index) => (
         <li
           key={s.id}
           draggable
@@ -39,16 +39,52 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
           }}
           className={dragOverId === s.id ? "dragover" : ""}
         >
-          <span className="grip">⠿</span>
+          <span className="grip" aria-hidden="true">
+            {String(index + 1).padStart(2, "0")}
+          </span>
           <img src={art(s.artworkUrl)} alt="" />
           <div className="info">
             <div className="t">{s.trackName}</div>
-            <div className="a">{s.artistName}</div>
+            <div className="a">
+              {s.artistName} · {s.requestedBy}
+            </div>
           </div>
-          <span className="by">{s.requestedBy}</span>
-          <button className="del" type="button" onClick={() => onRemove(s.id)}>
-            ✕
-          </button>
+          <div className="queue-actions">
+            <button
+              className="btn icon ghost"
+              type="button"
+              disabled={index === 0}
+              aria-label={`${s.trackName} 위로 이동`}
+              onClick={() => {
+                const ids = queue.map((song) => song.id);
+                ids.splice(index - 1, 0, ...ids.splice(index, 1));
+                onReorder(ids);
+              }}
+            >
+              ↑
+            </button>
+            <button
+              className="btn icon ghost"
+              type="button"
+              disabled={index === queue.length - 1}
+              aria-label={`${s.trackName} 아래로 이동`}
+              onClick={() => {
+                const ids = queue.map((song) => song.id);
+                ids.splice(index + 1, 0, ...ids.splice(index, 1));
+                onReorder(ids);
+              }}
+            >
+              ↓
+            </button>
+            <button
+              className="btn danger"
+              type="button"
+              aria-label={`${s.trackName} 대기열에서 삭제`}
+              onClick={() => onRemove(s.id)}
+            >
+              삭제
+            </button>
+          </div>
         </li>
       ))}
     </ul>
@@ -57,7 +93,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
 
 export function HistoryList({ history }: { history: SongView[] }) {
   return (
-    <ul className="queue">
+    <ul className="queue history">
       {history.map((s) => (
         <li key={s.id}>
           <img src={art(s.artworkUrl)} alt="" />

@@ -11,7 +11,6 @@ import {
 import { useJukeboxSnapshot } from "../hooks";
 import { apiErrorMessage } from "../shared";
 import { useTheme } from "../theme";
-import { ThemeSegment } from "../theme-segment";
 import type { Snapshot } from "../types";
 import { AuthGate } from "./auth-gate";
 
@@ -38,8 +37,8 @@ export function useAdminSession(): AdminSessionValue {
 }
 
 const TABS: ReadonlyArray<{ href: string; id: AdminTabId; label: string }> = [
-  { href: "/admin/songs", id: "songs", label: "🎵 노래 관리" },
-  { href: "/admin/qr", id: "qr", label: "🔲 QR 관리" },
+  { href: "/admin/songs", id: "songs", label: "노래 관리" },
+  { href: "/admin/qr", id: "qr", label: "테이블 · QR" },
 ];
 
 export function AdminSession({
@@ -53,6 +52,8 @@ export function AdminSession({
   const [token, setToken] = useState("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const { snap, refresh } = useJukeboxSnapshot(authed);
   const pending = useRef(new Set<string>());
   const loginPending = useRef(false);
@@ -97,9 +98,9 @@ export function AdminSession({
         if (r.ok) setAuthed(true);
         else if (r.status === 401) {
           window.localStorage.removeItem("bj_admin");
-        } else window.alert(`관리자 연결 실패 (HTTP ${r.status})`);
+        } else setLoginError(`관리자 연결 실패 (HTTP ${r.status})`);
       })
-      .catch(() => window.alert("관리자 연결에 실패했어요"));
+      .catch(() => setLoginError("관리자 연결에 실패했어요"));
   }, []);
 
   // 해시(#qr) 시절 북마크를 실제 라우트로 넘긴다.
@@ -112,12 +113,14 @@ export function AdminSession({
   const login = async () => {
     if (loginPending.current) return;
     loginPending.current = true;
+    setLoggingIn(true);
+    setLoginError("");
     try {
       const res = await fetch("/api/admin/tables", {
         headers: { "x-admin-token": tokenInput },
       });
       if (!res.ok) {
-        window.alert(
+        setLoginError(
           res.status === 401
             ? "비밀번호가 틀렸어요"
             : `로그인 실패 (HTTP ${res.status})`,
@@ -128,9 +131,10 @@ export function AdminSession({
       setToken(tokenInput);
       setAuthed(true);
     } catch {
-      window.alert("관리자 연결에 실패했어요");
+      setLoginError("관리자 연결에 실패했어요");
     } finally {
       loginPending.current = false;
+      setLoggingIn(false);
     }
   };
 
@@ -161,33 +165,63 @@ export function AdminSession({
         onLogin={login}
         onTokenInput={setTokenInput}
         tokenInput={tokenInput}
+        pending={loggingIn}
+        error={loginError}
       />
     );
   }
 
   return (
     <div className="admin-root">
-      <div className="topbar">
-        <h1>주크박스 관리</h1>
-        <div className="topright">
-          <ThemeSegment onSelect={setTheme} theme={theme} />
-        </div>
+      <div className="admin-shell">
+        <header className="topbar">
+          <div className="admin-brand">
+            <span aria-hidden="true">♪</span> 주크박스 <small>관리자</small>
+          </div>
+          <nav className="tabbar" aria-label="관리자 메뉴">
+            {TABS.map((tab) => (
+              <Link
+                aria-current={active === tab.id ? "page" : undefined}
+                className={`tab${active === tab.id ? " active" : ""}`}
+                href={tab.href}
+                key={tab.id}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="topright">
+            <span
+              className={`reception-status${
+                snap?.requestsPaused ? " paused" : ""
+              }`}
+            >
+              {snap
+                ? snap.requestsPaused
+                  ? "접수 중지"
+                  : "접수 중"
+                : "연결 중"}
+            </span>
+            <select
+              className="admin-theme"
+              aria-label="테마 선택"
+              value={theme}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (value === "light" || value === "dark" || value === "system")
+                  setTheme(value);
+              }}
+            >
+              <option value="system">시스템</option>
+              <option value="light">밝게</option>
+              <option value="dark">어둡게</option>
+            </select>
+          </div>
+        </header>
+        <AdminSessionContext.Provider value={{ act, api, snap }}>
+          <main>{children}</main>
+        </AdminSessionContext.Provider>
       </div>
-      <div className="tabbar">
-        {TABS.map((tab) => (
-          <Link
-            aria-current={active === tab.id ? "page" : undefined}
-            className={`tab${active === tab.id ? " active" : ""}`}
-            href={tab.href}
-            key={tab.id}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-      <AdminSessionContext.Provider value={{ act, api, snap }}>
-        {children}
-      </AdminSessionContext.Provider>
     </div>
   );
 }
