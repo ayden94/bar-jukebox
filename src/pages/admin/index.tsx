@@ -2,14 +2,15 @@ import {
   createReactRouteSnapshot,
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
-import { themeScript } from "../theme";
+import { bakedTheme, themePreferenceFromCookie, themeScript } from "../theme";
 import { AdminApp } from "./admin-app";
 
 export type AdminDocumentProps = {
   readonly stylesheets: readonly string[];
+  readonly theme?: string;
 };
 
-export function AdminDocument({ stylesheets }: AdminDocumentProps) {
+export function AdminDocument({ stylesheets, theme }: AdminDocumentProps) {
   const routeUrl =
     typeof window === "undefined"
       ? "/admin"
@@ -17,9 +18,17 @@ export function AdminDocument({ stylesheets }: AdminDocumentProps) {
 
   return (
     <ReactClientRouterProvider
-      initialSnapshot={createReactRouteSnapshot({ params: {}, url: routeUrl })}
+      initialSnapshot={createReactRouteSnapshot({
+        params: {},
+        url: routeUrl,
+      })}
     >
-      <html suppressHydrationWarning={true} data-page="admin" lang="ko">
+      <html
+        data-theme={bakedTheme(theme ?? themePreferenceFromCookie())}
+        suppressHydrationWarning={true}
+        data-page="admin"
+        lang="ko"
+      >
         <head>
           <meta charSet="utf-8" />
           <meta content="width=device-width, initial-scale=1" name="viewport" />

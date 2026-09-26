@@ -46,6 +46,9 @@
   --card-bg: #f2f2f7;
   --input-border: #d2d2d7;
   --row-border: #e5e5ea;
+  --card2: #fff;
+  --line: #d2d2d7;
+  --sub: #8e8e93;
   --mini-bg: rgba(245, 245, 247, 0.92);
   --mini-border: #d2d2d7;
   --sheet-bg: #f5f5f7;
@@ -156,16 +159,34 @@ button {
   padding: 6px 12px;
 }
 
-.themebtn {
+.themeseg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin: 0;
+  min-inline-size: 0;
   background: var(--card-bg);
   border: 1px solid var(--line);
-  color: var(--text);
   border-radius: 999px;
-  width: 34px;
-  height: 34px;
-  font-size: 0.95rem;
+}
+
+.themesegbtn {
+  border: none;
+  background: transparent;
+  color: var(--sub);
+  border-radius: 999px;
+  width: 30px;
+  height: 28px;
+  font-size: 0.9rem;
   cursor: pointer;
   line-height: 1;
+  transition: background 0.2s var(--spring);
+}
+
+.themesegbtn.active {
+  background: var(--card2);
+  color: var(--text);
 }
 
 .banner {
@@ -691,16 +712,13 @@ input::placeholder {
   gap: 8px;
 }
 
-.admin-root .themebtn {
+.admin-root .themeseg {
   background: var(--admin-panel);
-  border: 1px solid var(--admin-panel-border);
-  color: var(--text);
-  border-radius: 999px;
-  width: 34px;
-  height: 34px;
-  font-size: 0.95rem;
-  cursor: pointer;
-  line-height: 1;
+  border-color: var(--admin-panel-border);
+}
+
+.admin-root .themesegbtn.active {
+  background: var(--admin-progress-bg);
 }
 
 .admin-root .tabbar {

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useJukeboxSnapshot } from "../hooks";
 import { useTheme } from "../theme";
+import { ThemeSegment } from "../theme-segment";
 import { AuthGate } from "./auth-gate";
 import { QrTab } from "./qr-tab";
 import { SongsTab } from "./songs-tab";
 
 export function AdminApp() {
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   const [token, setToken] = useState("");
   const [authed, setAuthed] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
@@ -17,7 +18,10 @@ export function AdminApp() {
     (path: string, opts: RequestInit = {}) =>
       fetch(path, {
         ...opts,
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": token,
+        },
       }),
     [token],
   );
@@ -96,14 +100,7 @@ export function AdminApp() {
       <div className="topbar">
         <h1>주크박스 관리</h1>
         <div className="topright">
-          <button
-            className="themebtn"
-            onClick={toggleTheme}
-            type="button"
-            aria-label="테마 전환"
-          >
-            {theme === "light" ? "🌙" : "☀️"}
-          </button>
+          <ThemeSegment theme={theme} onSelect={setTheme} />
         </div>
       </div>
       <div className="tabbar">

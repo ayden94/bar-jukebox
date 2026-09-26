@@ -1,4 +1,10 @@
-import { FromBody, FromPath, FromQuery, Optional } from "@fluojs/http";
+import {
+  FromBody,
+  FromCookie,
+  FromPath,
+  FromQuery,
+  Optional,
+} from "@fluojs/http";
 import { IsString } from "@fluojs/validation";
 
 export class GuestQueryDto {
@@ -10,6 +16,10 @@ export class GuestQueryDto {
   @IsString()
   @FromQuery("k")
   k = "";
+  @Optional()
+  @IsString()
+  @FromCookie("bj_theme")
+  theme = "";
 }
 
 export class TableQueryDto {

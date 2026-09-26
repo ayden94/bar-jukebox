@@ -22,7 +22,7 @@ export function GuestApp({
   error?: string;
   tableLabel?: string;
 }) {
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   const { snap, refresh } = useJukeboxSnapshot(!error);
   const { toast, showToast } = useToast();
   const [myDevice, setMyDevice] = useState("");
@@ -31,7 +31,9 @@ export function GuestApp({
     if (error) return;
     const params = new URLSearchParams(window.location.search);
     fetch(
-      `/api/table?t=${params.get("t")}&k=${encodeURIComponent(params.get("k") ?? "")}`,
+      `/api/table?t=${params.get("t")}&k=${encodeURIComponent(
+        params.get("k") ?? "",
+      )}`,
     )
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -83,7 +85,7 @@ export function GuestApp({
 
   return (
     <div className="guest">
-      <TopBar theme={theme} toggleTheme={toggleTheme} tableLabel={tableLabel} />
+      <TopBar theme={theme} onThemeSelect={setTheme} tableLabel={tableLabel} />
       {paused ? (
         <div className="banner pause">지금은 곡 신청을 받고 있지 않아요</div>
       ) : null}

@@ -2,19 +2,21 @@ import {
   createReactRouteSnapshot,
   ReactClientRouterProvider,
 } from "@fluojs/react/client";
-import { themeScript } from "../theme";
+import { bakedTheme, themePreferenceFromCookie, themeScript } from "../theme";
 import { GuestApp } from "./guest-app";
 
 export type GuestDocumentProps = {
   readonly stylesheets: readonly string[];
   readonly tableLabel?: string;
   readonly error?: string;
+  readonly theme?: string;
 };
 
 export function GuestDocument({
   stylesheets,
   tableLabel,
   error,
+  theme,
 }: GuestDocumentProps) {
   const routeUrl =
     typeof window === "undefined"
@@ -23,12 +25,17 @@ export function GuestDocument({
 
   return (
     <ReactClientRouterProvider
-      initialSnapshot={createReactRouteSnapshot({ params: {}, url: routeUrl })}
+      initialSnapshot={createReactRouteSnapshot({
+        params: {},
+        url: routeUrl,
+      })}
     >
       <html
         data-error={error ?? ""}
         data-page="guest"
         data-table-label={tableLabel ?? ""}
+        data-theme={bakedTheme(theme ?? themePreferenceFromCookie())}
+        suppressHydrationWarning={true}
         lang="ko"
       >
         <head>

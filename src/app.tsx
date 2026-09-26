@@ -20,6 +20,7 @@ import { createReactViteAssetManifest } from "@fluojs/react/vite";
 import { IsString } from "@fluojs/validation";
 import { AdminController } from "./domains/admin/admin.controller";
 import { AdminTokenGuard } from "./domains/admin/admin-token.guard";
+import { AdminPageDto } from "./domains/admin/dto";
 import { EventsController } from "./domains/events/events.controller";
 import { SseBroker } from "./domains/events/sse-broker";
 import { PlaybackService } from "./domains/playback/playback.service";
@@ -94,11 +95,16 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
                 : "테이블 QR 코드로 접속해주세요"
             }
             stylesheets={assets.css}
+            theme={dto.theme}
           />
         );
       }
       return (
-        <GuestDocument stylesheets={assets.css} tableLabel={table.label} />
+        <GuestDocument
+          stylesheets={assets.css}
+          tableLabel={table.label}
+          theme={dto.theme}
+        />
       );
     }
   }
@@ -106,8 +112,9 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   @Router("/admin")
   class AdminPageRouter {
     @Path("/")
-    admin() {
-      return <AdminDocument stylesheets={assets.css} />;
+    @RequestDto(AdminPageDto)
+    admin(dto: AdminPageDto) {
+      return <AdminDocument stylesheets={assets.css} theme={dto.theme} />;
     }
   }
 
