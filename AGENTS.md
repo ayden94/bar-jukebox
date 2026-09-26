@@ -13,7 +13,7 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 ├── src/main.ts         # server boot: SQLite hydrate, client-manifest load, FluoFactory, playback loop
 ├── src/app.tsx         # JukeboxModule wiring: controllers, providers, middleware, React page routers
 ├── src/controllers/    # HTTP surface: guest API, token-guarded admin API, SSE stream, DTOs
-├── src/jukebox/        # framework-agnostic domain: state store, SQLite, osascript playback, search
+├── src/jukebox/        # framework-agnostic domain: state store, drizzle/libsql persistence, osascript playback, search
 ├── src/middleware/     # device identity cookie (bj_did)
 ├── src/pages/          # React UI: guest + admin sub-apps, SSR/hydration entries, shared hooks/theme
 ├── public/             # legacy pre-React HTML shells (copied to dist/client by Vite default publicDir)
@@ -26,7 +26,7 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 |------|----------|-------|
 | Add/modify an API route | src/controllers/*.controller.ts | @Get/@Post + @RequestDto; DTO classes in dto.ts |
 | Queue/state rules | src/jukebox/state.ts | 1 song/device, no duplicate track, own-cancel-only |
-| Persistence / schema | src/jukebox/db.ts | bun:sqlite WAL; full snapshot rewritten on every mutate |
+| Persistence / schema | src/jukebox/db.ts + schema.ts | drizzle-orm/libsql over @libsql/client (async); full snapshot rewritten in one transaction on every mutate |
 | Music playback | src/jukebox/playback.ts | osascript Music.app; mute → album-skip trick |
 | Song search | src/jukebox/search.ts | iTunes Search API → `music://` album URLs |
 | SSE realtime | src/controllers/events.controller.ts | bus "mutate"/"progress" → snapshot broadcast, 25s ping |
@@ -43,7 +43,7 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 | state (JukeboxStateStore) | singleton | src/jukebox/state.ts | ~10 files | in-memory queue/history/now-playing + rules |
 | jukeboxProviders | const | src/jukebox/providers.ts | 4 files | DI token → singleton mapping |
 | startPlaybackLoop | fn | src/jukebox/playback.ts | main.ts | sequential Music.app playback loop |
-| loadState / saveSnapshot | fn | src/jukebox/db.ts | main.ts | SQLite restore / persist |
+| loadState / saveSnapshot | fn | src/jukebox/db.ts | main.ts | SQLite restore / persist (async; writes serialized) |
 | onChange / emit | fn | src/jukebox/bus.ts | state, main, events ctrl | mutate/progress event bus |
 | searchMusic | fn | src/jukebox/search.ts | providers | iTunes search, music:// URL builder |
 | SseBroker | class | src/jukebox/sse-broker.ts | events ctrl | wakes all SSE waiters on change |

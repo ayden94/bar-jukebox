@@ -1,4 +1,8 @@
-import { Database } from "bun:sqlite";
+import { type Client, createClient } from "@libsql/client";
+import { asc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/libsql";
+
+import { history, nowPlaying, queue, settings, tables } from "./schema";
 import type { JukeboxState, Song } from "./types";
 
 export type TableRow = {
@@ -8,9 +12,13 @@ export type TableRow = {
   createdAt: number;
 };
 
-const db = new Database("jukebox.sqlite", { create: true });
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec(`
+// libsql 클라이언트: file: URL은 프로세스 CWD 기준이라 서버는 repo 루트에서 실행한다.
+export const libsqlClient: Client = createClient({
+  url: "file:jukebox.sqlite",
+});
+export const database = drizzle(libsqlClient);
+
+const SCHEMA_DDL = `
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -36,7 +44,12 @@ db.exec(`
     data TEXT NOT NULL,
     started_at INTEGER NOT NULL
   );
-`);
+`;
+
+export async function initDatabase(): Promise<void> {
+  await libsqlClient.execute("PRAGMA journal_mode = WAL;");
+  await libsqlClient.executeMultiple(SCHEMA_DDL);
+}
 
 function parseSong(json: string): Song | null {
   try {
@@ -46,26 +59,23 @@ function parseSong(json: string): Song | null {
   }
 }
 
-export function loadState(): JukeboxState {
-  const pausedRow = db
-    .query("SELECT value FROM settings WHERE key = 'requests_paused'")
-    .get() as { value: string } | null;
-  const noticeRow = db
-    .query("SELECT value FROM settings WHERE key = 'notice'")
-    .get() as { value: string } | null;
-  const queueRows = db
-    .query("SELECT data FROM queue ORDER BY position")
-    .all() as {
-    data: string;
-  }[];
-  const historyRows = db
-    .query("SELECT data FROM history ORDER BY position")
-    .all() as {
-    data: string;
-  }[];
-  const npRow = db.query("SELECT data FROM now_playing WHERE id = 1").get() as {
-    data: string;
-  } | null;
+export async function loadState(): Promise<JukeboxState> {
+  const settingRows = await database.select().from(settings);
+  const pausedRow = settingRows.find((row) => row.key === "requests_paused");
+  const noticeRow = settingRows.find((row) => row.key === "notice");
+  const queueRows = await database
+    .select()
+    .from(queue)
+    .orderBy(asc(queue.position));
+  const historyRows = await database
+    .select()
+    .from(history)
+    .orderBy(asc(history.position));
+  const npRows = await database
+    .select()
+    .from(nowPlaying)
+    .where(eq(nowPlaying.id, 1));
+  const npRow = npRows[0];
 
   const nowPlayingSong = npRow ? parseSong(npRow.data) : null;
   return {
@@ -79,95 +89,121 @@ export function loadState(): JukeboxState {
         }
       : null,
     queue: queueRows
-      .map((r) => parseSong(r.data))
-      .filter((s): s is Song => s !== null),
+      .map((row) => parseSong(row.data))
+      .filter((song): song is Song => song !== null),
     history: historyRows
-      .map((r) => parseSong(r.data))
-      .filter((s): s is Song => s !== null),
+      .map((row) => parseSong(row.data))
+      .filter((song): song is Song => song !== null),
     requestsPaused: pausedRow?.value === "1",
     notice: noticeRow?.value ?? "",
   };
 }
 
-export function saveSnapshot(snapshot: JukeboxState): void {
-  const persist = db.transaction((s: JukeboxState) => {
-    db.query(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES ('requests_paused', ?)",
-    ).run(s.requestsPaused ? "1" : "0");
-    db.query(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES ('notice', ?)",
-    ).run(s.notice);
+async function rewriteSnapshot(snapshot: JukeboxState): Promise<void> {
+  await database.transaction(async (tx) => {
+    await tx.delete(settings);
+    await tx.insert(settings).values([
+      {
+        key: "requests_paused",
+        value: snapshot.requestsPaused ? "1" : "0",
+      },
+      { key: "notice", value: snapshot.notice },
+    ]);
 
-    db.query("DELETE FROM queue").run();
-    const insertQueue = db.query(
-      "INSERT INTO queue (id, data, position) VALUES (?, ?, ?)",
-    );
-    s.queue.forEach((song, index) => {
-      insertQueue.run(song.id, JSON.stringify(song), index);
-    });
+    await tx.delete(queue);
+    if (snapshot.queue.length > 0) {
+      await tx.insert(queue).values(
+        snapshot.queue.map((song, index) => ({
+          id: song.id,
+          data: JSON.stringify(song),
+          position: index,
+        })),
+      );
+    }
 
-    db.query("DELETE FROM history").run();
-    const insertHistory = db.query(
-      "INSERT INTO history (id, data, position) VALUES (?, ?, ?)",
-    );
-    s.history.forEach((song, index) => {
-      insertHistory.run(song.id, JSON.stringify(song), index);
-    });
+    await tx.delete(history);
+    if (snapshot.history.length > 0) {
+      await tx.insert(history).values(
+        snapshot.history.map((song, index) => ({
+          id: song.id,
+          data: JSON.stringify(song),
+          position: index,
+        })),
+      );
+    }
 
-    db.query("DELETE FROM now_playing").run();
-    if (s.nowPlaying) {
-      db.query(
-        "INSERT INTO now_playing (id, data, started_at) VALUES (1, ?, ?)",
-      ).run(JSON.stringify(s.nowPlaying.song), s.nowPlaying.startedAt);
+    await tx.delete(nowPlaying);
+    if (snapshot.nowPlaying) {
+      await tx.insert(nowPlaying).values({
+        id: 1,
+        data: JSON.stringify(snapshot.nowPlaying.song),
+        startedAt: snapshot.nowPlaying.startedAt,
+      });
     }
   });
-  persist(snapshot);
 }
 
-export function listTables(): TableRow[] {
-  const rows = db
-    .query("SELECT id, label, secret, created_at FROM tables ORDER BY id")
-    .all() as {
-    id: number;
-    label: string;
-    secret: string;
-    created_at: number;
-  }[];
-  return rows.map((r) => ({
-    id: r.id,
-    label: r.label,
-    secret: r.secret,
-    createdAt: r.created_at,
+// 연속 mutate 사이에 쓰기 순서가 뒤섞이지 않도록 직렬화한다.
+let writeChain: Promise<void> = Promise.resolve();
+
+export function saveSnapshot(snapshot: JukeboxState): Promise<void> {
+  const task = writeChain.then(() => rewriteSnapshot(snapshot));
+  writeChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
+export async function listTables(): Promise<TableRow[]> {
+  const rows = await database.select().from(tables).orderBy(asc(tables.id));
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    secret: row.secret,
+    createdAt: row.createdAt,
   }));
 }
 
-export function getTable(id: number): TableRow | null {
-  const row = db
-    .query("SELECT id, label, secret, created_at FROM tables WHERE id = ?")
-    .get(id) as {
-    id: number;
-    label: string;
-    secret: string;
-    created_at: number;
-  } | null;
-  if (!row) return null;
+export async function getTable(id: number): Promise<TableRow | null> {
+  const rows = await database
+    .select()
+    .from(tables)
+    .where(eq(tables.id, id))
+    .limit(1);
+  const row = rows[0];
+  return row
+    ? {
+        id: row.id,
+        label: row.label,
+        secret: row.secret,
+        createdAt: row.createdAt,
+      }
+    : null;
+}
+
+export async function createTable(
+  label: string,
+  secret: string,
+): Promise<TableRow> {
+  const inserted = await database
+    .insert(tables)
+    .values({ label, secret, createdAt: Date.now() })
+    .returning();
+  const row = inserted[0];
+  if (!row) throw new Error("table insert returned no row");
   return {
     id: row.id,
     label: row.label,
     secret: row.secret,
-    createdAt: row.created_at,
+    createdAt: row.createdAt,
   };
 }
 
-export function createTable(label: string, secret: string): TableRow {
-  const createdAt = Date.now();
-  const result = db
-    .query("INSERT INTO tables (label, secret, created_at) VALUES (?, ?, ?)")
-    .run(label, secret, createdAt);
-  return { id: Number(result.lastInsertRowid), label, secret, createdAt };
-}
-
-export function deleteTable(id: number): boolean {
-  const result = db.query("DELETE FROM tables WHERE id = ?").run(id);
-  return result.changes > 0;
+export async function deleteTable(id: number): Promise<boolean> {
+  const deleted = await database
+    .delete(tables)
+    .where(eq(tables.id, id))
+    .returning({ id: tables.id });
+  return deleted.length > 0;
 }

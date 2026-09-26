@@ -81,15 +81,16 @@ export class AdminController {
   @Post("/reorder")
   @RequestDto(ReorderDto)
   reorder(dto: ReorderDto) {
-    if (!Array.isArray(dto?.ids))
+    if (!Array.isArray(dto?.ids)) {
       throw new BadRequestException("ids 배열이 필요해요");
+    }
     this.state.reorder(dto.ids);
     return { ok: true };
   }
 
   @Get("/tables")
-  tables() {
-    const tables = this.db.listTables().map((t) => ({
+  async tables() {
+    const tables = (await this.db.listTables()).map((t) => ({
       id: t.id,
       label: t.label,
       url: `${BASE_URL}/?t=${t.id}&k=${t.secret}`,
@@ -100,26 +101,32 @@ export class AdminController {
 
   @Post("/tables")
   @RequestDto(TableLabelDto)
-  createTable(dto: TableLabelDto) {
+  async createTable(dto: TableLabelDto) {
     const label = dto.label.trim();
     if (!label) throw new BadRequestException("테이블 이름을 입력해주세요");
-    if (label.length > 30)
+    if (label.length > 30) {
       throw new BadRequestException("테이블 이름은 30자 이내");
+    }
     const secret = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
-    const table = this.db.createTable(label, secret);
+    const table = await this.db.createTable(label, secret);
     console.log(`+ table: ${table.label} (#${table.id})`);
     return {
       ok: true,
-      table: { ...table, url: `${BASE_URL}/?t=${table.id}&k=${table.secret}` },
+      table: {
+        ...table,
+        url: `${BASE_URL}/?t=${table.id}&k=${table.secret}`,
+      },
     };
   }
 
   @Delete("/tables/:id")
   @RequestDto(TableIdDto)
-  deleteTable(dto: TableIdDto) {
+  async deleteTable(dto: TableIdDto) {
     const id = Number(dto.id);
-    if (!Number.isInteger(id)) throw new BadRequestException("잘못된 id예요");
-    const removed = this.db.deleteTable(id);
+    if (!Number.isInteger(id)) {
+      throw new BadRequestException("잘못된 id예요");
+    }
+    const removed = await this.db.deleteTable(id);
     return { ok: removed };
   }
 
@@ -127,7 +134,7 @@ export class AdminController {
   @RequestDto(TableIdDto)
   async qr(dto: TableIdDto) {
     const id = Number(dto.id);
-    const table = Number.isInteger(id) ? this.db.getTable(id) : null;
+    const table = Number.isInteger(id) ? await this.db.getTable(id) : null;
     if (!table) throw new BadRequestException("테이블을 찾을 수 없어요");
     const url = `${BASE_URL}/?t=${table.id}&k=${table.secret}`;
     const svg = await QRCode.toString(url, {
@@ -145,8 +152,9 @@ export class AdminController {
       this.state.setRequestsPaused(dto.requestsPaused);
     }
     if (typeof dto?.notice === "string") {
-      if (dto.notice.length > 200)
+      if (dto.notice.length > 200) {
         throw new BadRequestException("공지는 200자 이내");
+      }
       this.state.setNotice(dto.notice);
     }
     return { ok: true };

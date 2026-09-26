@@ -11,12 +11,15 @@
   },
   "dependencies": {
     "@fluojs/core": "^2.1.1",
+    "@fluojs/drizzle": "2.1.1",
     "@fluojs/http": "^3.1.2",
     "@fluojs/platform-bun": "^3.0.1",
     "@fluojs/react": "^0.2.1",
     "@fluojs/runtime": "^3.1.1",
     "@fluojs/validation": "^2.1.1",
     "@fluojs/vite": "^2.0.1",
+    "@libsql/client": "^0.18.0",
+    "drizzle-orm": "0.45.3",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

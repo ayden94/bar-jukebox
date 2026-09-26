@@ -79,8 +79,8 @@ export class JukeboxController {
 
   @Get("/api/table")
   @RequestDto(TableQueryDto)
-  table(dto: TableQueryDto, context: RequestContext) {
-    const table = this.db.getTable(Number(dto.t));
+  async table(dto: TableQueryDto, context: RequestContext) {
+    const table = await this.db.getTable(Number(dto.t));
     if (!table || table.secret !== dto.k) {
       throw new ForbiddenException("QR 코드를 확인할 수 없어요");
     }
@@ -109,8 +109,8 @@ export class JukeboxController {
 
   @Post("/api/request")
   @RequestDto(RequestSongDto)
-  request(dto: RequestSongDto, context: RequestContext) {
-    const table = this.db.getTable(dto.tableId);
+  async request(dto: RequestSongDto, context: RequestContext) {
+    const table = await this.db.getTable(dto.tableId);
     if (!table || table.secret !== dto.tableSecret) {
       throw new ForbiddenException("유효하지 않은 테이블이에요");
     }

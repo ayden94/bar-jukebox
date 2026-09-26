@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { Inject, Module } from "@fluojs/core";
+import { DrizzleModule } from "@fluojs/drizzle";
 import {
   Controller,
   FromPath,
@@ -22,6 +23,7 @@ import { AdminTokenGuard } from "./controllers/admin-token.guard";
 import { GuestQueryDto } from "./controllers/dto";
 import { EventsController } from "./controllers/events.controller";
 import { JukeboxController } from "./controllers/jukebox.controller";
+import { database as jukeboxDrizzle, libsqlClient } from "./jukebox/db";
 import type { JukeboxDatabase } from "./jukebox/providers";
 import {
   JukeboxBusToken,
@@ -39,6 +41,14 @@ import {
 } from "./middleware/device-cookie.middleware";
 import { AdminDocument } from "./pages/admin";
 import { GuestDocument } from "./pages/guest";
+
+type JukeboxDrizzle = typeof jukeboxDrizzle;
+type JukeboxDrizzleTxOptions = NonNullable<
+  Parameters<JukeboxDrizzle["transaction"]>[1]
+>;
+type JukeboxDrizzleTx = Parameters<
+  Parameters<JukeboxDrizzle["transaction"]>[0]
+>[0];
 
 export type CreateJukeboxModuleOptions = {
   readonly clientDirectory: URL;
@@ -78,10 +88,11 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
 
     @Path("/")
     @RequestDto(GuestQueryDto)
-    guest(dto: GuestQueryDto, context: RequestContext) {
+    async guest(dto: GuestQueryDto, context: RequestContext) {
       void deviceIdOf(context);
       const tableId = Number(dto.t);
-      const table = dto.t && dto.k ? this.jukeboxDb.getTable(tableId) : null;
+      const table =
+        dto.t && dto.k ? await this.jukeboxDb.getTable(tableId) : null;
       if (!table || table.secret !== dto.k) {
         return (
           <GuestDocument
@@ -150,7 +161,18 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
   }
 
   // 도메인 싱글턴(providers.ts)은 여기 한 곳에만 등록하고 exports로 공유한다 — 중복 등록 경고 방지.
+  // drizzle 핸들을 fluo 라이프사이클에 연결한다 (앱 종료 시 libsql close).
   @Module({
+    imports: [
+      DrizzleModule.forRoot<
+        JukeboxDrizzle,
+        JukeboxDrizzleTx,
+        JukeboxDrizzleTxOptions
+      >({
+        database: jukeboxDrizzle,
+        dispose: () => libsqlClient.close(),
+      }),
+    ],
     providers: jukeboxProviders,
     exports: [
       JukeboxStateToken,
