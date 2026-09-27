@@ -25,6 +25,14 @@ function memoryRepository(): QueueRepository {
       queued = queued.filter((entry) => entry.id !== song.id);
       current = { song, startedAt };
     },
+    restartNowPlaying: async (startedAt) => {
+      if (current) current = { ...current, startedAt };
+    },
+    returnToPrevious: async (displaced, previous, startedAt) => {
+      queued.unshift(displaced);
+      played = played.filter((song) => song.id !== previous.id);
+      current = { song: previous, startedAt };
+    },
     finishNowPlaying: async (song, result, max) => {
       if (result === "done") played = [song, ...played].slice(0, max);
       current = null;

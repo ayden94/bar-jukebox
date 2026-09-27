@@ -27,7 +27,18 @@ export function SongsTab({ snap, act }: SongsTabProps) {
       </div>
       <div className="wrap">
         <div className="admin-stack">
-          <NowPlayingCard np={np} onSkip={() => act("/api/admin/skip")} />
+          <NowPlayingCard
+            np={np}
+            onPrevious={() => act("/api/admin/previous")}
+            onTogglePlayback={() =>
+              act(
+                np?.status === "paused"
+                  ? "/api/admin/resume"
+                  : "/api/admin/pause",
+              )
+            }
+            onSkip={() => act("/api/admin/skip")}
+          />
           <section className="panel" aria-labelledby="queue-heading">
             <div className="panel-head">
               <h2 id="queue-heading">재생 대기열</h2>

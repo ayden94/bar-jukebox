@@ -1543,10 +1543,23 @@ input::placeholder {
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
-.admin-root .skiprow {
+.admin-root .player-controls {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-width: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+.admin-root .btn.player-control {
+  height: 44px;
+  border-radius: 50%;
+}
+.admin-root .btn.player-toggle {
+  width: 56px;
+  height: 56px;
 }
 .admin-root .queue,
 .admin-root .tablelist,

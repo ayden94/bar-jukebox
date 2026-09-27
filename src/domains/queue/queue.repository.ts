@@ -15,6 +15,8 @@ export interface QueueRepository {
   removeQueueSong(id: string): Promise<void>;
   replaceQueuePositions(songs: Song[]): Promise<void>;
   takeAndStart(song: Song, startedAt: number): Promise<void>;
+  restartNowPlaying(startedAt: number): Promise<void>;
+  returnToPrevious(current: Song, previous: Song, startedAt: number): Promise<void>;
   finishNowPlaying(
     song: Song,
     result: "done" | "failed",
@@ -128,6 +130,31 @@ export class DrizzleQueueRepository implements QueueRepository {
         await tx
           .insert(nowPlaying)
           .values({ id: 1, data: JSON.stringify(song), startedAt });
+      }),
+    );
+  }
+
+  restartNowPlaying(startedAt: number): Promise<void> {
+    return this.serialize(async () => {
+      await this.db.update(nowPlaying).set({ startedAt }).where(eq(nowPlaying.id, 1));
+    });
+  }
+
+  returnToPrevious(current: Song, previous: Song, startedAt: number): Promise<void> {
+    return this.serialize(() =>
+      this.db.transaction(async (tx) => {
+        await tx.update(queue).set({ position: sql`${queue.position} + 1` });
+        await tx.insert(queue).values({
+          id: current.id,
+          data: JSON.stringify(current),
+          position: 0,
+        });
+        await tx.delete(history).where(eq(history.id, previous.id));
+        await tx.update(history).set({ position: sql`${history.position} - 1` });
+        await tx.update(nowPlaying).set({
+          data: JSON.stringify(previous),
+          startedAt,
+        }).where(eq(nowPlaying.id, 1));
       }),
     );
   }

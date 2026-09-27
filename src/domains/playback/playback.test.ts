@@ -7,12 +7,11 @@ import { QueueService } from "../queue/queue.service";
 import type { Song } from "../shared/types";
 import {
   advanceThroughAlbum,
-  type PlaybackDriver,
-  PlaybackService,
   type TrackNavigator,
   type VolumeController,
   withMutedVolume,
-} from "./playback.service";
+} from "./music.driver";
+import { type PlaybackDriver, PlaybackService } from "./playback.service";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -58,6 +57,10 @@ function driver(overrides: Partial<PlaybackDriver> = {}): PlaybackDriver {
   return {
     play: async () => undefined,
     stop: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+    restart: async () => undefined,
+    now: () => 0,
     currentTrackId: async () => 1,
     playerState: async () => "playing",
     position: async () => 0,
@@ -202,7 +205,7 @@ test("완료 저장 실패를 숨기거나 다음 곡을 시작하지 않아요"
   expect(await repo.loadHistory()).toEqual([]);
 });
 
-test("동시 건너뛰기는 한 번만 멈추고 늦은 완료는 건너뛴 곡을 기록하지 않아요", async () => {
+test("동시 건너뛰기는 한 번만 멈추고 늦은 완료도 히스토리를 중복 기록하지 않아요", async () => {
   const { repo, queue } = await fixture();
   await queue.enqueue(song("a"));
   await queue.enqueue(song("b"));
@@ -243,7 +246,7 @@ test("동시 건너뛰기는 한 번만 멈추고 늦은 완료는 건너뛴 곡
   await running;
   expect(stops).toBe(1);
   expect(played).toEqual(["a", "b"]);
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["b"]);
+  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["b", "a"]);
 });
 
 test("완료 저장 중 들어온 늦은 건너뛰기는 다음 곡을 멈추지 않아요", async () => {
@@ -358,5 +361,5 @@ test("정지 실패와 건너뛰기 저장 실패를 호출자에게 전달하�
   await playback.skip();
   expect(queue.nowPlayingSong()).toBeNull();
   expect(await repo.loadNowPlaying()).toBeNull();
-  expect(await repo.loadHistory()).toEqual([]);
+  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["a"]);
 });

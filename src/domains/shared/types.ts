@@ -17,7 +17,7 @@ export type Song = {
 export type NowPlaying = {
   song: Song;
   startedAt: number;
-  status: "playing" | "failed";
+  status: "playing" | "paused";
   positionSec: number;
   durationSec: number | null;
 };

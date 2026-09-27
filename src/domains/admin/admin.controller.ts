@@ -50,6 +50,24 @@ export class AdminController {
     return { ok: true };
   }
 
+  @Post("/pause")
+  async pause() {
+    await this.playback.pause();
+    return { ok: true };
+  }
+
+  @Post("/resume")
+  async resume() {
+    await this.playback.resume();
+    return { ok: true };
+  }
+
+  @Post("/previous")
+  async previous() {
+    await this.playback.previous();
+    return { ok: true };
+  }
+
   @Post("/remove")
   @RequestDto(CancelDto)
   async remove(dto: CancelDto) {

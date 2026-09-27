@@ -121,6 +121,40 @@ export class QueueService {
     });
   }
 
+  // 위치와 마찬가지로 실제 플레이어에서 관찰한 상태예요. 복원 시 다시 읽어요.
+  updatePlaybackStatus(status: NowPlaying["status"], expectedSongId: string): void {
+    if (!this.nowPlaying || this.nowPlaying.song.id !== expectedSongId) return;
+    if (this.nowPlaying.status === status) return;
+    this.nowPlaying.status = status;
+    emit("mutate");
+  }
+
+  previous(expectedSongId: string, restart: boolean): Promise<Song | null> {
+    return this.mutate(async () => {
+      const current = this.nowPlaying;
+      if (!current || current.song.id !== expectedSongId) return null;
+      const previous = restart ? undefined : this.history[0];
+      const startedAt = Date.now();
+      if (previous) {
+        await this.repository.returnToPrevious(current.song, previous, startedAt);
+        this.queue.unshift(current.song);
+        this.history.shift();
+      } else {
+        await this.repository.restartNowPlaying(startedAt);
+      }
+      this.nowPlaying = {
+        song: previous ?? current.song,
+        startedAt,
+        status: current.status,
+        positionSec: 0,
+        durationSec: previous ? null : current.durationSec,
+      };
+      this.lastProgressSec = -1;
+      emit("mutate");
+      return this.nowPlaying.song;
+    });
+  }
+
   updateProgress(
     positionSec: number,
     durationSec: number | null,

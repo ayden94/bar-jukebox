@@ -13,6 +13,7 @@ export type SongView = {
 
 export type NowPlayingView = {
   song: SongView;
+  status: "playing" | "paused";
   positionSec: number;
   durationSec: number | null;
 };
