@@ -84,7 +84,9 @@ test("각 트랙 전환이 끝난 뒤에 다음 곡으로 넘겨요", async () =
       return currentTrack;
     },
     nextTrack: async () => {
-      if (transitionPending) throw new Error("이전 전환이 끝나지 않았어요");
+      if (transitionPending) {
+        throw new Error("이전 전환이 끝나지 않았어요");
+      }
       transitionPending = true;
     },
   };
@@ -246,7 +248,10 @@ test("동시 건너뛰기는 한 번만 멈추고 늦은 완료도 히스토리�
   await running;
   expect(stops).toBe(1);
   expect(played).toEqual(["a", "b"]);
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["b", "a"]);
+  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual([
+    "b",
+    "a",
+  ]);
 });
 
 test("완료 저장 중 들어온 늦은 건너뛰기는 다음 곡을 멈추지 않아요", async () => {

@@ -122,8 +122,13 @@ export class QueueService {
   }
 
   // 위치와 마찬가지로 실제 플레이어에서 관찰한 상태예요. 복원 시 다시 읽어요.
-  updatePlaybackStatus(status: NowPlaying["status"], expectedSongId: string): void {
-    if (!this.nowPlaying || this.nowPlaying.song.id !== expectedSongId) return;
+  updatePlaybackStatus(
+    status: NowPlaying["status"],
+    expectedSongId: string,
+  ): void {
+    if (!this.nowPlaying || this.nowPlaying.song.id !== expectedSongId) {
+      return;
+    }
     if (this.nowPlaying.status === status) return;
     this.nowPlaying.status = status;
     emit("mutate");
@@ -136,7 +141,11 @@ export class QueueService {
       const previous = restart ? undefined : this.history[0];
       const startedAt = Date.now();
       if (previous) {
-        await this.repository.returnToPrevious(current.song, previous, startedAt);
+        await this.repository.returnToPrevious(
+          current.song,
+          previous,
+          startedAt,
+        );
         this.queue.unshift(current.song);
         this.history.shift();
       } else {
@@ -164,8 +173,9 @@ export class QueueService {
       !this.nowPlaying ||
       (expectedSongId !== undefined &&
         this.nowPlaying.song.id !== expectedSongId)
-    )
+    ) {
       return;
+    }
     const pos = Math.max(0, Math.round(positionSec));
     this.nowPlaying.positionSec = pos;
     this.nowPlaying.durationSec = durationSec;

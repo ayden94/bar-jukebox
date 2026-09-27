@@ -1,15 +1,15 @@
-import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
-import { FluoFactory } from "@fluojs/runtime";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
+import { FluoFactory } from "@fluojs/runtime";
 
 import { createJukeboxModule } from "./app";
 import {
-    playbackService,
-    queueRepository,
-    queueService,
-    settingsRepository,
-    settingsService,
+  playbackService,
+  queueRepository,
+  queueService,
+  settingsRepository,
+  settingsService,
 } from "./domains/providers";
 import { initDatabase } from "./infra/db";
 
