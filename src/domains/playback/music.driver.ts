@@ -4,7 +4,13 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
 async function osa(script: string): Promise<string> {
-  const proc = Bun.spawn(["osascript", "-e", script], {
+  // VS Code 터미널의 앱 정보를 물려받아도 Dock에 제어 프로세스를 표시하지 않아요.
+  const backgroundScript = [
+    'use framework "AppKit"',
+    "current application's NSApplication's sharedApplication()'s setActivationPolicy:2",
+    script,
+  ].join("\n");
+  const proc = Bun.spawn(["osascript", "-e", backgroundScript], {
     stdout: "pipe",
     stderr: "pipe",
   });
