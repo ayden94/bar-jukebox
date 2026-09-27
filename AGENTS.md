@@ -75,7 +75,8 @@ Bar jukebox: guests scan a table QR and request songs from their phone; the bar'
 ## COMMANDS
 ```bash
 bun install
-bun run dev            # fluo dev
+bun run dev            # fluo server watch (does not rebuild client assets)
+bun run dev:client     # Vite client watch, including Tailwind CSS; run alongside dev
 bun run build          # vite client build, then vite server build (both required)
 bun start              # bun dist/server/main.js (needs client build first)
 bun test               # unit tests (bun:test, src/domains/**/*.test.ts)

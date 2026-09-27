@@ -8,6 +8,7 @@ import {
 import { createPortal } from "react-dom";
 import { apiErrorMessage } from "../shared";
 import type { TableRow } from "../types";
+import { admin } from "./styles";
 
 type QrTabProps = {
   api: (path: string, opts?: RequestInit) => Promise<Response>;
@@ -17,9 +18,18 @@ type PrintCard = { label: string; svg: string; url: string };
 
 type LoadState = "loading" | "ready" | "error";
 
-function QrSvg({ svg }: { svg: string }) {
-  // biome-ignore lint/security/noDangerouslySetInnerHtml: 서버가 생성한 신뢰할 수 있는 QR SVG
-  return <div dangerouslySetInnerHTML={{ __html: svg }} />;
+function QrSvg({ svg, framed = false }: { svg: string; framed?: boolean }) {
+  return (
+    <div
+      className={
+        framed
+          ? "rounded-lg bg-white p-2 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+          : undefined
+      }
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: 서버가 생성한 신뢰할 수 있는 QR SVG
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function QrTab({ api }: QrTabProps) {
@@ -153,17 +163,25 @@ export function QrTab({ api }: QrTabProps) {
     const qrLoading = busyKeys.has(`qr-${t.id}`);
     const removing = busyKeys.has(`remove-${t.id}`);
     return (
-      <li key={String(t.id)}>
-        <div className="table-row">
-          <div className="table-mark" aria-hidden="true">
+      <li
+        className="border-t border-[var(--admin-panel-border)] py-4.5 first:border-t-0 first:pt-0"
+        key={String(t.id)}
+      >
+        <div className="flex items-center gap-3.5 max-[640.001px]:flex-wrap">
+          <div
+            className="grid size-10.5 shrink-0 place-items-center rounded-[10px] bg-[var(--admin-input-bg)] text-[0.8rem] text-[var(--admin-muted)] tabular-nums max-[640.001px]:size-9.5"
+            aria-hidden="true"
+          >
             {t.id}
           </div>
-          <div className="tlabel">{t.label}</div>
-          <div className="table-actions">
+          <div className="min-w-0 flex-1 font-[650] [overflow-wrap:anywhere]">
+            {t.label}
+          </div>
+          <div className="flex shrink-0 gap-2 max-[640.001px]:w-full max-[640.001px]:justify-end">
             <button
               aria-controls={detailsId}
               aria-expanded={expanded}
-              className="btn ghost"
+              className={`${admin.button} ${admin.ghost} admin-button`}
               disabled={qrLoading}
               onClick={() => toggleQr(t.id)}
               type="button"
@@ -176,7 +194,7 @@ export function QrTab({ api }: QrTabProps) {
             </button>
             <button
               aria-label={`${t.label} 테이블 삭제`}
-              className="btn danger"
+              className={`${admin.button} ${admin.danger} admin-button`}
               disabled={removing}
               onClick={() => removeTable(t)}
               type="button"
@@ -186,23 +204,25 @@ export function QrTab({ api }: QrTabProps) {
           </div>
         </div>
         {qr ? (
-          <div className="qr-details" id={detailsId}>
-            <div className="qrbox">
-              <QrSvg svg={qr.svg} />
+          <div className="min-w-0" id={detailsId}>
+            <div className="mt-4 grid grid-cols-[180px_minmax(0,1fr)] items-center gap-6 rounded-xl bg-[var(--admin-input-bg)] p-5 max-[960.001px]:grid-cols-[minmax(0,1fr)] max-[640.001px]:gap-4 max-[640.001px]:p-4 max-[960.001px]:[&>div:first-child]:mx-auto max-[960.001px]:[&>div:first-child]:w-45 max-[960.001px]:[&>div:first-child]:max-w-full">
+              <QrSvg svg={qr.svg} framed={true} />
               <div>
                 <strong>{t.label}</strong>
-                <p className="note">
+                <p className={admin.note}>
                   이 QR을 스캔하면 이 테이블의 신청 화면으로 이동해요.
                 </p>
                 <a
-                  className="btn ghost"
+                  className={`${admin.button} ${admin.ghost} admin-button mt-3`}
                   href={qr.url}
                   rel="noreferrer"
                   target="_blank"
                 >
                   신청 화면 열기
                 </a>
-                <div className="qurl">{qr.url}</div>
+                <div className="mt-2.5 text-xs leading-[1.7] text-[var(--admin-muted)] [overflow-wrap:anywhere]">
+                  {qr.url}
+                </div>
               </div>
             </div>
           </div>
@@ -213,15 +233,15 @@ export function QrTab({ api }: QrTabProps) {
 
   return (
     <>
-      <div className="admin-pagehead">
+      <div className={admin.pageHead}>
         <div>
           <h1>테이블 &amp; QR</h1>
-          <p className="note">
+          <p className={admin.note}>
             테이블마다 QR을 인쇄해 두면 손님이 스캔해서 노래를 신청할 수 있어요.
           </p>
         </div>
         <button
-          className="btn ghost"
+          className={`${admin.button} ${admin.ghost} admin-button`}
           disabled={!tables.length || printing}
           onClick={printAll}
           type="button"
@@ -229,16 +249,16 @@ export function QrTab({ api }: QrTabProps) {
           {printing ? "인쇄 준비 중이에요" : "테이블 QR 전체 인쇄"}
         </button>
       </div>
-      <div className="qr-layout">
-        <section className="panel">
-          <div className="panel-head">
+      <div className="grid grid-cols-[300px_minmax(0,1fr)] items-start gap-[var(--admin-gap)] max-[960.001px]:grid-cols-[260px_minmax(0,1fr)] max-[640.001px]:grid-cols-[minmax(0,1fr)]">
+        <section className={admin.panel}>
+          <div className={admin.panelHead}>
             <h2>테이블 추가</h2>
           </div>
           <form onSubmit={createTable}>
-            <label className="field-label" htmlFor="table-label">
+            <label className={admin.fieldLabel} htmlFor="table-label">
               테이블 이름
             </label>
-            <div className="field">
+            <div className={admin.field}>
               <input
                 disabled={creating}
                 id="table-label"
@@ -249,23 +269,25 @@ export function QrTab({ api }: QrTabProps) {
                 value={label}
               />
               <button
-                className="btn"
+                className={`${admin.button} admin-button`}
                 disabled={!label.trim() || creating}
                 type="submit"
               >
                 {creating ? "추가 중이에요" : "추가"}
               </button>
             </div>
-            <p className="note">이름은 QR 인쇄물에 함께 표시돼요.</p>
+            <p className={admin.note}>이름은 QR 인쇄물에 함께 표시돼요.</p>
           </form>
         </section>
-        <section className="panel">
-          <div className="panel-head">
+        <section className={admin.panel}>
+          <div className={admin.panelHead}>
             <h2>테이블 목록</h2>
-            <span className="count">{`등록 ${tables.length}개`}</span>
+            <span className={admin.count}>{`등록 ${tables.length}개`}</span>
           </div>
-          <ul className="tablelist">{tableRows}</ul>
-          {tableRows.length ? null : <div className="empty">{emptyText}</div>}
+          <ul className="m-0 list-none p-0">{tableRows}</ul>
+          {tableRows.length ? null : (
+            <div className={admin.empty}>{emptyText}</div>
+          )}
         </section>
       </div>
       {printCards.length

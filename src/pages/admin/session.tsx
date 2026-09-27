@@ -13,6 +13,7 @@ import { apiErrorMessage } from "../shared";
 import { useTheme } from "../theme";
 import type { Snapshot } from "../types";
 import { AuthGate } from "./auth-gate";
+import { admin } from "./styles";
 
 export type AdminTabId = "songs" | "qr";
 
@@ -172,17 +173,24 @@ export function AdminSession({
   }
 
   return (
-    <div className="admin-root">
-      <div className="admin-shell">
-        <header className="topbar">
-          <div className="admin-brand">
+    <div className={admin.root}>
+      <div className="mx-auto max-w-[1180px]">
+        <header className="mb-8 flex items-center gap-8 border-b border-[var(--admin-panel-border)] pb-6 max-[960.001px]:flex-wrap max-[960.001px]:gap-4 max-[640.001px]:mb-6 max-[640.001px]:gap-3 max-[640.001px]:pb-4">
+          <div className="flex items-center gap-1.5 whitespace-nowrap text-[1.1rem] font-extrabold tracking-[-0.04em] [&_span]:text-2xl max-[640.001px]:[&_span]:leading-[36px] [&_span]:text-[var(--admin-accent)] [&_small]:ml-1.5 [&_small]:text-xs [&_small]:font-medium [&_small]:tracking-normal [&_small]:text-[var(--admin-muted)] max-[960.001px]:[&_small]:hidden">
             <span aria-hidden="true">♪</span> 주크박스 <small>관리자</small>
           </div>
-          <nav className="tabbar" aria-label="관리자 메뉴">
+          <nav
+            className="flex gap-1 max-[640.001px]:order-3 max-[640.001px]:grid max-[640.001px]:w-full max-[640.001px]:grid-cols-2"
+            aria-label="관리자 메뉴"
+          >
             {TABS.map((tab) => (
               <Link
                 aria-current={active === tab.id ? "page" : undefined}
-                className={`tab${active === tab.id ? " active" : ""}`}
+                className={`min-h-11 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-center font-semibold no-underline hover:bg-[var(--admin-panel)] hover:text-[var(--admin-ink)] ${
+                  active === tab.id
+                    ? "bg-[var(--admin-panel)] text-[var(--admin-ink)]"
+                    : "text-[var(--admin-muted)]"
+                }`}
                 href={tab.href}
                 key={tab.id}
               >
@@ -190,10 +198,10 @@ export function AdminSession({
               </Link>
             ))}
           </nav>
-          <div className="topright">
+          <div className="ml-auto flex items-center gap-4 max-[640.001px]:gap-2">
             <span
-              className={`reception-status${
-                snap?.requestsPaused ? " paused" : ""
+              className={`reception-status flex items-center gap-[7px] whitespace-nowrap text-xs ${
+                snap?.requestsPaused ? "is-paused" : ""
               }`}
             >
               {snap
@@ -203,13 +211,18 @@ export function AdminSession({
                 : "연결 중"}
             </span>
             <select
-              className="admin-theme"
+              className="min-h-11 cursor-pointer rounded-lg border-0 bg-transparent px-2 text-[var(--admin-muted)] [&_option]:bg-[var(--admin-panel)] [&_option]:text-[var(--admin-ink)]"
               aria-label="테마 선택"
               value={theme}
               onChange={(event) => {
                 const value = event.currentTarget.value;
-                if (value === "light" || value === "dark" || value === "system")
+                if (
+                  value === "light" ||
+                  value === "dark" ||
+                  value === "system"
+                ) {
                   setTheme(value);
+                }
               }}
             >
               <option value="system">시스템</option>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useInfiniteScroll } from "../hooks";
 import { apiErrorMessage, art, SEARCH_PAGE } from "../shared";
 import type { SearchHit } from "../types";
+import { admin } from "./styles";
 
 type AddSongProps = {
   onAdd: (hit: SearchHit) => Promise<void>;
@@ -63,16 +64,16 @@ export function AddSong({ onAdd }: AddSongProps) {
   };
 
   return (
-    <section className="panel" aria-labelledby="add-heading">
-      <div className="panel-head">
+    <section className={admin.panel} aria-labelledby="add-heading">
+      <div className={admin.panelHead}>
         <h2 id="add-heading">곡 추가</h2>
-        <span className="count">바텐더</span>
+        <span className={admin.count}>바텐더</span>
       </div>
-      <p className="note panel-description">
+      <p className={`${admin.note} !mt-[-8px] !mb-4.5`}>
         손님 신청과 별개로 원하는 곡을 추가해요.
       </p>
       <form
-        className="field"
+        className={admin.field}
         onSubmit={(event) => {
           event.preventDefault();
           if (!searching) void search();
@@ -94,11 +95,15 @@ export function AddSong({ onAdd }: AddSongProps) {
             searchAbort.current?.abort();
           }}
         />
-        <button className="btn" type="submit" disabled={!q.trim() || searching}>
+        <button
+          className={`${admin.button} admin-button`}
+          type="submit"
+          disabled={!q.trim() || searching}
+        >
           {searching ? "검색 중" : "검색"}
         </button>
       </form>
-      <p className="search-status note" role="status">
+      <p className={`${admin.note} !my-3`} role="status">
         {searching
           ? "곡을 찾고 있어요"
           : searched
@@ -107,16 +112,27 @@ export function AddSong({ onAdd }: AddSongProps) {
               : "검색 결과가 없어요. 다른 검색어를 입력해보세요."
             : "검색 후 대기열에 추가할 수 있어요."}
       </p>
-      <ul className="searchres">
+      <ul className="m-0 max-h-90 list-none overflow-y-auto p-0 [overscroll-behavior:contain]">
         {results.slice(0, visibleCount).map((h) => (
-          <li key={h.trackId}>
-            <img src={art(h.artworkUrl)} alt="" />
-            <div className="info">
-              <div className="t">{h.trackName}</div>
-              <div className="a">{h.artistName}</div>
+          <li
+            className="flex items-center gap-2.5 border-t border-[var(--admin-panel-border)] py-3"
+            key={h.trackId}
+          >
+            <img
+              className="size-9 shrink-0 rounded-md object-cover"
+              src={art(h.artworkUrl)}
+              alt=""
+            />
+            <div className="min-w-0 flex-1">
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
+                {h.trackName}
+              </div>
+              <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
+                {h.artistName}
+              </div>
             </div>
             <button
-              className="btn ghost"
+              className={`${admin.button} ${admin.ghost} admin-button`}
               type="button"
               disabled={adding !== null}
               onClick={async () => {
@@ -133,7 +149,11 @@ export function AddSong({ onAdd }: AddSongProps) {
           </li>
         ))}
         {results.length > visibleCount ? (
-          <li className="more" key="more" ref={moreRef}>
+          <li
+            className="flex justify-center border-b-0 py-3 text-[0.8rem] text-[var(--admin-muted)]"
+            key="more"
+            ref={moreRef}
+          >
             ∨ 더 보기
           </li>
         ) : null}

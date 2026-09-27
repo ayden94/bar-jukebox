@@ -87,9 +87,9 @@ export function PlaybackSheet({ open, onClose, children }: PlaybackSheetProps) {
   return (
     <dialog
       ref={sheet}
-      className={`sheet${open ? " open" : ""}${
-        offset !== null ? " dragging" : ""
-      }`}
+      className={`playback-sheet fixed inset-x-0 top-auto bottom-0 z-30 m-auto h-[min(94dvh,920px)] w-full max-w-160 overflow-y-auto rounded-t-[28px] border-0 bg-[var(--guest-surface)] px-6 pt-0 pb-[calc(30px+env(safe-area-inset-bottom))] text-[var(--guest-ink)] [overscroll-behavior:contain] transition-transform duration-480 ease-[var(--guest-ease)] motion-reduce:duration-[1ms] max-[420.001px]:px-4.5 ${
+        open ? "is-open translate-y-0" : "pointer-events-none translate-y-full"
+      } ${offset !== null ? "transition-none" : ""}`}
       style={
         offset === null ? undefined : { transform: `translateY(${offset}px)` }
       }
@@ -118,10 +118,10 @@ export function PlaybackSheet({ open, onClose, children }: PlaybackSheetProps) {
         }
       }}
     >
-      <div className="sheettop">
+      <div className="sticky top-0 z-1 -mx-6 flex min-h-15.5 items-center justify-center bg-[var(--guest-surface)] px-6 max-[420.001px]:-mx-4.5 max-[420.001px]:px-4.5">
         <button
           type="button"
-          className="sheethandle"
+          className="flex min-h-11 w-19 cursor-grab touch-none select-none items-center justify-center rounded-xl border-0 bg-transparent p-0 active:cursor-grabbing hover:brightness-115"
           aria-label="재생 화면 닫기"
           onClick={(event) => {
             if (event.detail === 0 || !suppressClick.current) {
@@ -175,7 +175,10 @@ export function PlaybackSheet({ open, onClose, children }: PlaybackSheetProps) {
           onPointerCancel={cancelDrag}
           onLostPointerCapture={cancelDrag}
         >
-          <span className="sheetgrab" aria-hidden="true" />
+          <span
+            className="h-[5px] w-9.5 rounded-[99px] bg-[var(--guest-muted)] opacity-55"
+            aria-hidden="true"
+          />
         </button>
       </div>
       {children}

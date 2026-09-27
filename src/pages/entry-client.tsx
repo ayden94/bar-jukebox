@@ -2,7 +2,7 @@ import { hydrateRoot } from "react-dom/client";
 
 import { AdminQrDocument, AdminSongsDocument } from "./admin";
 import { GuestDocument } from "./guest";
-import "./styles.css";
+import "./tailwind.css";
 
 const stylesheets = [
   ...document.querySelectorAll<HTMLLinkElement>("link[data-vite-style]"),

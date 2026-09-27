@@ -3,6 +3,7 @@ import { AddSong } from "./add-song";
 import { NowPlayingCard } from "./now-playing-card";
 import { SettingsPanel } from "./settings-panel";
 import { HistoryList, QueueList } from "./song-list";
+import { admin } from "./styles";
 
 type SongsTabProps = {
   snap: Snapshot | null;
@@ -16,17 +17,17 @@ export function SongsTab({ snap, act }: SongsTabProps) {
 
   return (
     <>
-      <div className="admin-pagehead">
+      <div className={admin.pageHead}>
         <div>
           <h1>노래 관리</h1>
           <p>지금 흐르는 음악과 손님들의 신청곡을 한눈에 확인해요.</p>
         </div>
-        <span className="page-count">
+        <span className="whitespace-nowrap text-[var(--admin-muted)] max-[640.001px]:text-[0.8rem] [&_strong]:ml-1.5 [&_strong]:text-[1.1rem] [&_strong]:text-[var(--admin-ink)]">
           대기 중 <strong>{queue.length}곡</strong>
         </span>
       </div>
-      <div className="wrap">
-        <div className="admin-stack">
+      <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-[var(--admin-gap)] max-[960.001px]:grid-cols-[minmax(0,1fr)]">
+        <div className={admin.stack}>
           <NowPlayingCard
             np={np}
             onPrevious={() => act("/api/admin/previous")}
@@ -39,12 +40,12 @@ export function SongsTab({ snap, act }: SongsTabProps) {
             }
             onSkip={() => act("/api/admin/skip")}
           />
-          <section className="panel" aria-labelledby="queue-heading">
-            <div className="panel-head">
+          <section className={admin.panel} aria-labelledby="queue-heading">
+            <div className={admin.panelHead}>
               <h2 id="queue-heading">재생 대기열</h2>
-              <span className="count">{queue.length}곡</span>
+              <span className={admin.count}>{queue.length}곡</span>
             </div>
-            <p className="note queue-help">
+            <p className={`${admin.note} !mt-[-10px] !mb-3`}>
               끌어 놓거나 화살표를 눌러 순서를 바꿔요.
             </p>
             <QueueList
@@ -53,23 +54,27 @@ export function SongsTab({ snap, act }: SongsTabProps) {
               onRemove={(id) => act("/api/admin/remove", { id })}
             />
             {queue.length ? null : (
-              <div className="empty">
+              <div className={admin.empty}>
                 대기 중인 곡이 없어요.
                 <br />
                 손님의 신청을 기다리거나 직접 곡을 추가해보세요.
               </div>
             )}
           </section>
-          <details className="panel history-panel">
-            <summary>
-              최근 재생 <span className="count">{history.length}곡</span>
+          <details
+            className={`${admin.panel} [&[open]_.history-summary]:mb-4.5`}
+          >
+            <summary className="history-summary flex cursor-pointer list-none items-center gap-2.5 text-base font-bold">
+              최근 재생 <span className={admin.count}>{history.length}곡</span>
             </summary>
             <HistoryList history={history} />
-            {history.length ? null : <div className="empty">기록이 없어요</div>}
+            {history.length ? null : (
+              <div className={admin.empty}>기록이 없어요</div>
+            )}
           </details>
         </div>
         <aside
-          className="admin-stack admin-sidebar"
+          className={`${admin.stack} max-[960.001px]:grid-cols-2 max-[960.001px]:items-start max-[640.001px]:grid-cols-[minmax(0,1fr)]`}
           aria-label="곡 추가와 운영 설정"
         >
           <AddSong

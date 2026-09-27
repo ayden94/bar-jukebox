@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { art } from "../shared";
 import type { SongView } from "../types";
+import { admin } from "./styles";
 
 type QueueListProps = {
   queue: SongView[];
@@ -13,7 +14,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   return (
-    <ul className="queue">
+    <ul className="m-0 list-none p-0">
       {queue.map((s, index) => (
         <li
           key={s.id}
@@ -37,21 +38,32 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
             dragIdRef.current = null;
             setDragOverId(null);
           }}
-          className={dragOverId === s.id ? "dragover" : ""}
+          className={`grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-3 border-t border-[var(--admin-panel-border)] py-3.5 first:border-t-0 max-[640.001px]:grid-cols-[22px_40px_minmax(0,1fr)] max-[640.001px]:gap-2.5 ${
+            dragOverId === s.id ? "rounded-lg bg-[var(--admin-input-bg)]" : ""
+          }`}
         >
-          <span className="grip" aria-hidden="true">
+          <span
+            className="cursor-grab select-none text-xs text-[var(--admin-muted)] tabular-nums"
+            aria-hidden="true"
+          >
             {String(index + 1).padStart(2, "0")}
           </span>
-          <img src={art(s.artworkUrl)} alt="" />
-          <div className="info">
-            <div className="t">{s.trackName}</div>
-            <div className="a">
+          <img
+            className="size-10 rounded-[7px] bg-[var(--admin-input-bg)] object-cover"
+            src={art(s.artworkUrl)}
+            alt=""
+          />
+          <div className="min-w-0">
+            <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
+              {s.trackName}
+            </div>
+            <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
               {s.artistName} · {s.requestedBy}
             </div>
           </div>
-          <div className="queue-actions">
+          <div className="flex items-center gap-1 max-[640.001px]:col-[2/-1] max-[640.001px]:justify-end">
             <button
-              className="btn icon ghost"
+              className={`${admin.button} ${admin.icon} ${admin.ghost} admin-button !px-2.5`}
               type="button"
               disabled={index === 0}
               aria-label={`${s.trackName} 위로 이동`}
@@ -64,7 +76,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
               ↑
             </button>
             <button
-              className="btn icon ghost"
+              className={`${admin.button} ${admin.icon} ${admin.ghost} admin-button !px-2.5`}
               type="button"
               disabled={index === queue.length - 1}
               aria-label={`${s.trackName} 아래로 이동`}
@@ -77,7 +89,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
               ↓
             </button>
             <button
-              className="btn danger"
+              className={`${admin.button} ${admin.danger} admin-button !px-2.5`}
               type="button"
               aria-label={`${s.trackName} 대기열에서 삭제`}
               onClick={() => onRemove(s.id)}
@@ -93,15 +105,25 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
 
 export function HistoryList({ history }: { history: SongView[] }) {
   return (
-    <ul className="queue history">
+    <ul className="m-0 list-none p-0 [&_li]:grid [&_li]:grid-cols-[40px_minmax(0,1fr)_auto] [&_li]:items-center [&_li]:gap-3 [&_li]:border-t [&_li]:border-[var(--admin-panel-border)] [&_li]:py-3.5 [&_li:first-child]:border-t-0 max-[640.001px]:[&_li]:grid-cols-[40px_minmax(0,1fr)]">
       {history.map((s) => (
         <li key={s.id}>
-          <img src={art(s.artworkUrl)} alt="" />
-          <div className="info">
-            <div className="t">{s.trackName}</div>
-            <div className="a">{s.artistName}</div>
+          <img
+            className="size-10 rounded-[7px] bg-[var(--admin-input-bg)] object-cover"
+            src={art(s.artworkUrl)}
+            alt=""
+          />
+          <div className="min-w-0">
+            <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
+              {s.trackName}
+            </div>
+            <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
+              {s.artistName}
+            </div>
           </div>
-          <span className="by">{s.requestedBy}</span>
+          <span className="max-w-25 text-xs text-[var(--admin-muted)] [overflow-wrap:anywhere] max-[640.001px]:col-start-2">
+            {s.requestedBy}
+          </span>
         </li>
       ))}
     </ul>

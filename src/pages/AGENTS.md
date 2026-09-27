@@ -13,7 +13,7 @@ Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydratio
 | Admin flow | admin/songs-page.tsx · admin/qr-page.tsx | Per-route page documents sharing admin/session.tsx (AuthGate → chrome → SongsTab / QrTab) |
 | Shared view types | types.ts | SongView/Snapshot mirror jukebox/types minus server-only fields |
 | Build entries | entry-client.tsx, entry-server.ts | client picks page via data-page; server re-exports the page documents |
-| Styling | styles.css (+ styles.d.ts shim) | single stylesheet, plain classes, dark/light via data-theme |
+| Styling | Tailwind utilities in TSX + tailwind.css/styles.css | Tailwind CSS v4 entry scopes scanning to src/pages; styles.css keeps theme tokens, base rules, keyframes, backdrop/pseudo, and print-only rules |
 
 ## CONVENTIONS (different from parent)
 - Client never imports server code: view types are re-declared in pages/types.ts (SongView vs Song).
@@ -22,7 +22,7 @@ Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydratio
 - Admin requests carry the x-admin-token header (token cached in localStorage bj_admin); guest requests rely on the bj_did cookie only.
 - 공개 곡의 isMine으로 본인 신청을 구분한다. deviceId나 쿠키 서명은 응답에서 읽지 않는다.
 - API 오류는 shared.ts의 apiErrorMessage로 구조화된 error.message를 추출한다. 검색은 이전 요청을 취소하고 최신 응답만 반영한다.
-- No CSS framework: one styles.css (~19KB) with plain classes; styles.d.ts shim allows `import "./styles.css"`.
+- Prefer Tailwind utility `className` styling in components. tailwind.css is the scoped framework entry; Biome's css.parser.tailwindDirectives enables its syntax checks. Keep styles.css for shared theme custom properties, global base behavior, keyframes, pseudo/backdrop rules that utilities cannot express cleanly, and print layout. styles.d.ts covers CSS imports.
 - Keep identifierPrefix "jukebox-react-" in sync between app.tsx (manifest) and entry-client.tsx (hydrateRoot).
 
 ## ANTI-PATTERNS

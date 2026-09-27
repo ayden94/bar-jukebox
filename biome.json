@@ -1,6 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
-  "files": { "includes": ["**", "!**/node_modules"] },
+  "files": {
+    "includes": ["**", "!**/node_modules"]
+  },
+  "css": { "parser": { "tailwindDirectives": true } },
   "linter": {
     "enabled": true,
     "rules": {

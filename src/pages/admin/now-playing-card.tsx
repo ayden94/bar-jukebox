@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { art, fmt } from "../shared";
 import type { NowPlayingView } from "../types";
+import { admin } from "./styles";
 
 export function NowPlayingCard({
   np,
@@ -38,11 +39,15 @@ export function NowPlayingCard({
       : 0;
 
   return (
-    <section className="panel now-panel" aria-labelledby="now-heading">
-      <div className="panel-head">
+    <section className={admin.panel} aria-labelledby="now-heading">
+      <div className={admin.panelHead}>
         <h2 id="now-heading">지금 재생 중</h2>
         <span
-          className={`playback-status${np && !paused ? " playing" : ""}`}
+          className={`text-xs ${
+            np && !paused
+              ? "text-[var(--admin-accent)]"
+              : "text-[var(--admin-muted)]"
+          }`}
           role="status"
         >
           {pending
@@ -54,19 +59,25 @@ export function NowPlayingCard({
               : "대기 중"}
         </span>
       </div>
-      <div className="now">
+      <div className="flex items-center gap-5 max-[640.001px]:gap-3.5 [&>div]:min-w-0">
         {npSong ? (
           <>
-            <img src={art(npSong.artworkUrl)} alt="" />
+            <img
+              className="size-19 shrink-0 rounded-xl bg-[var(--admin-input-bg)] object-cover max-[640.001px]:size-15"
+              src={art(npSong.artworkUrl)}
+              alt=""
+            />
             <div>
-              <div className="title">{npSong.trackName}</div>
-              <div className="artist">
+              <div className="text-[1.3rem] leading-[1.4] font-bold tracking-[-0.025em] [overflow-wrap:anywhere] max-[640.001px]:text-[1.15rem]">
+                {npSong.trackName}
+              </div>
+              <div className="mt-1.5 text-[0.85rem] text-[var(--admin-muted)] [overflow-wrap:anywhere]">
                 {`${npSong.artistName} · ${npSong.requestedBy}`}
               </div>
             </div>
           </>
         ) : (
-          <div className="empty">
+          <div className={`${admin.empty} w-full`}>
             아직 재생 중인 곡이 없어요.
             <br />
             대기열에 곡이 들어오면 음악이 시작돼요.
@@ -76,28 +87,31 @@ export function NowPlayingCard({
       {np ? (
         <>
           <div
-            className="progress"
+            className="mt-[22px] mb-1.5 h-1 overflow-hidden rounded bg-[var(--admin-panel-border)]"
             role="progressbar"
             aria-label="재생 진행률"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(progressPct)}
           >
-            <div className="bar" style={{ width: `${progressPct}%` }} />
+            <div
+              className="h-full rounded-[inherit] bg-[var(--admin-accent)]"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
-          <div className="playback-times">
+          <div className="flex justify-between text-xs text-[var(--admin-muted)] tabular-nums">
             <span>{fmt(np.positionSec)}</span>
             <span>{fmt(np.durationSec ?? npSong?.durationSec)}</span>
           </div>
         </>
       ) : null}
       <fieldset
-        className="player-controls"
+        className="mt-4 flex min-w-0 items-center justify-center gap-5 border-0 p-0"
         aria-label="재생 제어"
         aria-busy={pending}
       >
         <button
-          className="btn ghost icon player-control"
+          className={`${admin.button} ${admin.ghost} ${admin.icon} admin-button h-11 rounded-full`}
           disabled={!np || pending}
           onClick={() => void control(onPrevious)}
           type="button"
@@ -119,7 +133,7 @@ export function NowPlayingCard({
           </svg>
         </button>
         <button
-          className="btn icon player-control player-toggle"
+          className={`${admin.button} ${admin.icon} admin-button !size-14 rounded-full`}
           disabled={!np || pending}
           onClick={() => void control(onTogglePlayback)}
           type="button"
@@ -148,7 +162,7 @@ export function NowPlayingCard({
           </svg>
         </button>
         <button
-          className="btn ghost icon player-control"
+          className={`${admin.button} ${admin.ghost} ${admin.icon} admin-button h-11 rounded-full`}
           disabled={!np || pending}
           onClick={() => void control(onSkip)}
           type="button"
