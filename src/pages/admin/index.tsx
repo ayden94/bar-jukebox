@@ -1,2 +1,2 @@
-export { AdminQrDocument } from "./qr-page";
-export { AdminSongsDocument } from "./songs-page";
+export { default as AdminQrPage } from "./qr-page";
+export { default as AdminSongsPage } from "./songs-page";

@@ -4,12 +4,12 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@fluojs/core": "^2.1.2",
+        "@fluojs/core": "^2.1.3",
         "@fluojs/drizzle": "2.1.2",
-        "@fluojs/http": "^3.1.3",
-        "@fluojs/platform-bun": "^3.0.1",
-        "@fluojs/react": "^0.2.2",
-        "@fluojs/runtime": "^3.1.2",
+        "@fluojs/http": "^3.2.0",
+        "@fluojs/platform-bun": "^3.1.0",
+        "@fluojs/react": "^0.3.0",
+        "@fluojs/runtime": "^3.1.3",
         "@fluojs/validation": "^2.1.2",
         "@fluojs/vite": "^2.0.1",
         "@libsql/client": "^0.18.0",
@@ -166,21 +166,27 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
 
+    "@fluojs/auth": ["@fluojs/auth@0.2.0", "", { "dependencies": { "@fluojs/core": "^2.1.3" } }, "sha512-dBydyQQtBbP1mVtY9CQCU5x8E3uGLGILuxubTGqgyM5dP2Qd6BQpS49V7kFV2fi3jihKHSw63DYJLnIfjJE13w=="],
+
     "@fluojs/cli": ["@fluojs/cli@3.0.3", "", { "dependencies": { "ejs": "^3.1.10", "tsx": "^4.23.1", "typescript": "^6.0.2" }, "peerDependencies": { "@clack/prompts": "^1.3.0", "@fluojs/runtime": "^3.1.2", "@fluojs/studio": "^2.0.1" }, "optionalPeers": ["@clack/prompts", "@fluojs/runtime", "@fluojs/studio"], "bin": { "fluo": "bin/fluo.mjs" } }, "sha512-8wlP2OEtUrDE6sQe74AzCGFa2FYPMb+EZZVynNq1yvseJpU/pNqf6yA/kS14slCwOaXypg59wHZW7pOdILxQRw=="],
 
-    "@fluojs/core": ["@fluojs/core@2.1.2", "", {}, "sha512-pLnjE+aDdSXua+24VoJ9fPbRCt/17Nlgc10RGaXTQI+HBkrb6/1rLAmJ6hDLkiIkWbtCpIDfjSNKUmGIKwl7Mw=="],
+    "@fluojs/core": ["@fluojs/core@2.1.3", "", { "dependencies": { "@fluojs/diagnostics": "^0.2.0", "@fluojs/persistence": "^0.1.0" } }, "sha512-jGz/JsBSKE+U6fmbh5M9UKPBvNxtXMl3fvXvIU596l4hpux9Eto4hvxdBT/c6Q0Ili7XvHju5ZD+SDMa4axJpw=="],
 
     "@fluojs/di": ["@fluojs/di@3.1.2", "", { "dependencies": { "@fluojs/core": "^2.1.2" } }, "sha512-PYrrnFE+nUbXoUcCT2Ysv7mNzmsaYE9QYbE+FPzT8iE+AEjv3yUeiQNWjtJeaLqe49IgCznTh/a43UoAvWQuqQ=="],
 
+    "@fluojs/diagnostics": ["@fluojs/diagnostics@0.2.0", "", {}, "sha512-9vnIcpBRu7tynE0B/vLk8FpTloW/HyTCHiQsNRSoHpgXszJxIpTm+zmmIlBLT1tgrh/82p4mtfB+2N5EvBX3bg=="],
+
     "@fluojs/drizzle": ["@fluojs/drizzle@2.1.2", "", { "dependencies": { "@fluojs/core": "^2.1.2", "@fluojs/di": "^3.1.2", "@fluojs/runtime": "^3.1.2" }, "peerDependencies": { "drizzle-orm": ">=0.45.2" }, "optionalPeers": ["drizzle-orm"] }, "sha512-JEQM2ipJ0//5tkHK6dflgAwtmpDLHxC6n0dHh+ydqvHfE/Zh69bPYXTkCewUh3i92wRShORbaziR1H9TiHhYnQ=="],
 
-    "@fluojs/http": ["@fluojs/http@3.1.3", "", { "dependencies": { "@fluojs/core": "^2.1.2", "@fluojs/di": "^3.1.2", "@fluojs/validation": "^2.1.2" } }, "sha512-+UWumRvpAi/G5WnDouLyId7YZuwnL1BfaIXjIoeiGNnnmU9v+OBLUCI+pwibL/yrjbtKicGldG7g98JFqX83OQ=="],
+    "@fluojs/http": ["@fluojs/http@3.2.0", "", { "dependencies": { "@fluojs/auth": "^0.2.0", "@fluojs/core": "^2.1.3", "@fluojs/di": "^3.1.3", "@fluojs/validation": "^2.1.2" } }, "sha512-I1FvqqLkzIs9Y/FYW6iOa5JV0GsImIKoo8efniSA5MU6RetXIWxAwz4L6C0ziLONmVENcXnCHCyWFWQI9U7DJQ=="],
 
-    "@fluojs/platform-bun": ["@fluojs/platform-bun@3.0.1", "", { "dependencies": { "@fluojs/http": "^3.1.1", "@fluojs/runtime": "^3.1.1" } }, "sha512-pecBH82ZU9swxtqbzhg+5mKW9Ialkwvfrf23HLGjx5PtQUoym1llWQICSlwwYrdaDAtU31+xeSYREEKNgY0Btw=="],
+    "@fluojs/persistence": ["@fluojs/persistence@0.1.0", "", {}, "sha512-wgzrV1ohX+QLgvZ7SL2g8MjSeK1Knewcs2Lp/V/FmxwTzO/KiAwfldNHb8LAikhpN0iHtCciX/2WeCKqJ8cPrw=="],
 
-    "@fluojs/react": ["@fluojs/react@0.2.2", "", { "dependencies": { "@fluojs/core": "^2.1.2", "@fluojs/di": "^3.1.2", "@fluojs/http": "^3.1.3", "@fluojs/runtime": "^3.1.2" }, "peerDependencies": { "react": "^18.3.0 || ^19.0.0", "react-dom": "^18.3.0 || ^19.0.0" } }, "sha512-1edNBSyJL0IgXRh/npusEZCksLcGzZdwhS3E8vfgRmue/H6rDxgrZBKXRdcJVoKGiyt7zLnl9/ktRMARUJIsYA=="],
+    "@fluojs/platform-bun": ["@fluojs/platform-bun@3.1.0", "", { "dependencies": { "@fluojs/http": "^3.2.0", "@fluojs/runtime": "^3.1.3" } }, "sha512-BDkhH3/mdDX/P95Yg7HZqY8l+jYCX7fBZbZcih7MGF6/FwuS3urGagFCbrfyA3isjeMHfvGKwKPNiEPbtn4uNg=="],
 
-    "@fluojs/runtime": ["@fluojs/runtime@3.1.2", "", { "dependencies": { "@fluojs/core": "^2.1.2", "@fluojs/di": "^3.1.2", "@fluojs/http": "^3.1.3" } }, "sha512-JtGmX2h+vdIzwkhEfolNjxRtcZl+lMCrxuJJ9h+AbDhwQ0DcV8f15xi8y1Z4UHYv/QJ39L1smF8fzWTzX5INPQ=="],
+    "@fluojs/react": ["@fluojs/react@0.3.0", "", { "dependencies": { "@fluojs/core": "^2.1.3", "@fluojs/di": "^3.1.3", "@fluojs/http": "^3.2.0", "@fluojs/runtime": "^3.1.3" }, "peerDependencies": { "react": "^18.3.0 || ^19.0.0", "react-dom": "^18.3.0 || ^19.0.0" } }, "sha512-oFwGRbgnRenA+0z71J4+MkEztzj2LYGwYSuhrV018QJa1IabtfDc6B+aKBFeYkzf2bsQq5l8iLUnQTkutijVhg=="],
+
+    "@fluojs/runtime": ["@fluojs/runtime@3.1.3", "", { "dependencies": { "@fluojs/core": "^2.1.3", "@fluojs/di": "^3.1.3", "@fluojs/diagnostics": "^0.2.0", "@fluojs/http": "^3.2.0", "@fluojs/persistence": "^0.1.0" } }, "sha512-VLdL5zxg2AFv0RrApWMmS0o6AqpaBMmsO0W/3x8eUFBgSSoxyDHpBvhOAQAovnvVuScDrK8vqY364BAgeQs2iQ=="],
 
     "@fluojs/validation": ["@fluojs/validation@2.1.2", "", { "dependencies": { "@fluojs/core": "^2.1.2", "@standard-schema/spec": "^1.1.0", "validator": "^13.15.26" } }, "sha512-6qOfnMv76xng42whgAnynh2YSeLJWf+6ltX7dSiqODik+GSVfUfBmnVoV+ffw72WVg1Gj7vxPRXPJahXGPXSHg=="],
 
@@ -537,6 +543,12 @@
     "yargs-parser": ["yargs-parser@18.1.3", "", { "dependencies": { "camelcase": "^5.0.0", "decamelize": "^1.2.0" } }, "sha512-o50j0JeToy/4K6OZcaQmW6lyXXKhq7csREXcDwk2omFPJEwUNOVtJKvmDr9EI1fAJZUyZcRF7kxGBWmRXudrCQ=="],
 
     "@fluojs/cli/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@fluojs/http/@fluojs/di": ["@fluojs/di@3.1.3", "", { "dependencies": { "@fluojs/core": "^2.1.3" } }, "sha512-JmLCt8lUsXFk3td3qiDU25Up4kVOP8DqjdZ9xEGAJ69wb7MTY+5IkzKKvmd1W5h4bOJKIDzBbZPUncR0YFvdXw=="],
+
+    "@fluojs/react/@fluojs/di": ["@fluojs/di@3.1.3", "", { "dependencies": { "@fluojs/core": "^2.1.3" } }, "sha512-JmLCt8lUsXFk3td3qiDU25Up4kVOP8DqjdZ9xEGAJ69wb7MTY+5IkzKKvmd1W5h4bOJKIDzBbZPUncR0YFvdXw=="],
+
+    "@fluojs/runtime/@fluojs/di": ["@fluojs/di@3.1.3", "", { "dependencies": { "@fluojs/core": "^2.1.3" } }, "sha512-JmLCt8lUsXFk3td3qiDU25Up4kVOP8DqjdZ9xEGAJ69wb7MTY+5IkzKKvmd1W5h4bOJKIDzBbZPUncR0YFvdXw=="],
 
     "@tailwindcss/node/lightningcss": ["lightningcss@1.32.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.32.0", "lightningcss-darwin-arm64": "1.32.0", "lightningcss-darwin-x64": "1.32.0", "lightningcss-freebsd-x64": "1.32.0", "lightningcss-linux-arm-gnueabihf": "1.32.0", "lightningcss-linux-arm64-gnu": "1.32.0", "lightningcss-linux-arm64-musl": "1.32.0", "lightningcss-linux-x64-gnu": "1.32.0", "lightningcss-linux-x64-musl": "1.32.0", "lightningcss-win32-arm64-msvc": "1.32.0", "lightningcss-win32-x64-msvc": "1.32.0" } }, "sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ=="],
 
