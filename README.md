@@ -142,13 +142,41 @@ SSE와 폴링은 문서당 브라우저 스토어 하나가 소유하며 `pagehi
 배포할 때는 클라이언트와 서버를 함께 빌드하고 재시작해요.
 이미 열린 탭의 빌드가 달라지면 기본 문서 이동으로 새 버전을 불러와요.
 
-아래 검증은 운영 서버 대신 별도 DB와 재생 비활성화 서버를 사용해요.
+브라우저 검증은 임시 DB·임의 포트·임시 토큰으로 재생 비활성화 서버를 직접
+시작하고 종료 시 정리해요. 별도 실행 중인 서버나 운영 계정을 사용하지 않아요.
+실제 SSE 전송 단절·네트워크 복구와 외부 문서 왕복을 검증해요.
+운영의 `no-store` 응답에서는 일반 재로딩 복구를 확인하고, 테스트 프록시가
+HTML 캐시 헤더만 바꾼 별도 시나리오에서는 실제 `pageshow.persisted=true`와
+같은 문서의 SSE 재연결을 확인해요. 운영 캐시 정책은 바꾸지 않아요.
 
 ```bash
-PORT=5198 DATABASE_URL=:memory: ADMIN_TOKEN=react-qa-only PLAYBACK_DISABLED=1 bun start
-# 다른 터미널에서 실행해요 (Bun 1.4+, 설치된 Chrome 필요).
-REACT_TEST_URL=http://localhost:5198 REACT_TEST_ADMIN_TOKEN=react-qa-only bun tests/react-navigation.browser.ts
+bun run build
+bun test-flow.ts                      # IPC 준비 신호로 실제 포트를 받아요.
+bun tests/react-navigation.browser.ts # Bun 1.4+, 설치된 Chrome 필요
 ```
+
+### 저장 데이터 검사와 백업
+
+서버는 대기열·최근 재생·현재 재생 곡의 JSON 구조와 숫자 범위를 검사해요.
+손상된 행을 조용히 제외하지 않고 테이블·행 식별자와 오류 종류를 표시하며
+시작을 중단해요. 원본 데이터는 삭제하지 않으므로 먼저 백업한 뒤 복구해주세요.
+현재 Apple 곡 형식을 유지하며 provider ID 전환과 스키마 버전 마이그레이션은
+아직 포함하지 않아요.
+
+```bash
+# URL이 아닌 파일 경로를 전달해요. 출력 부모 폴더는 미리 만들어주세요.
+bun scripts/backup-database.ts ./jukebox.sqlite ./backups/jukebox-2026-10-15.sqlite
+```
+
+백업은 SQLite의 `VACUUM INTO`로 WAL의 커밋된 데이터까지 일관된 스냅샷으로
+저장해요. 실행 중인 DB에도 사용할 수 있고, 기존 출력 파일은 덮어쓰지 않아요.
+백업 파일에는 테이블 시크릿과 신청 소유권 정보가 있으므로 생성 시의
+소유자 전용 권한(`0600`)을 유지해주세요.
+
+복원할 때는 DB를 사용하는 서버·도구를 모두 종료한 뒤 기존 DB와 같은 이름의
+`-wal`·`-shm` 파일을 함께 다른 위치에 보관해요. 완료된 백업 파일만 설정된
+DB 경로에 배치하고, 그 경로에 예전 sidecar 파일이 남지 않았는지 확인한 뒤
+서버를 시작해주세요. 실행 중인 원본 DB 파일만 복사하는 방식은 사용하지 않아요.
 
 ## 📚 문서
 

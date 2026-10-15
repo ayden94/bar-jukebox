@@ -86,6 +86,10 @@ const app = await FluoFactory.create(AppModule, {
 
 await app.listen();
 
+if (process.send) {
+  process.send({ type: "jukebox-ready", port: adapter.getServer()?.port });
+}
+
 if (process.env.PLAYBACK_DISABLED !== "1") {
   playbackService.start().catch((e) => {
     console.error("playback loop crashed:", e);
