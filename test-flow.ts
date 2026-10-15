@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { startServerProcess } from "./tests/support/server-process";
 
 // Runs the built server against a private SQLite file and intercepts iTunes only in its child process.
 type Song = {
@@ -56,84 +57,30 @@ async function run() {
   const token = randomBytes(32).toString("hex");
   const secret = randomBytes(32).toString("hex");
   const preload = resolve("tests/support/itunes-preload.ts");
-  let child: ReturnType<typeof Bun.spawn> | undefined;
-  let output = "";
+  let child: Awaited<ReturnType<typeof startServerProcess>> | undefined;
   const spawnServer = async () => {
-    child = Bun.spawn(
-      ["bun", "--preload", preload, resolve("dist/server/main.js")],
-      {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          PORT: "0",
-          BASE_URL: "http://127.0.0.1",
-          DATABASE_URL: `file:${join(directory, "flow.sqlite")}`,
-          ADMIN_TOKEN: token,
-          DEVICE_COOKIE_SECRET: secret,
-          PLAYBACK_DISABLED: "1",
-        },
-        stdout: "pipe",
-        stderr: "pipe",
+    child = await startServerProcess({
+      command: [
+        process.execPath,
+        "--preload",
+        preload,
+        resolve("dist/server/main.js"),
+      ],
+      env: {
+        ...process.env,
+        PORT: "0",
+        BASE_URL: "http://127.0.0.1",
+        DATABASE_URL: `file:${join(directory, "flow.sqlite")}`,
+        ADMIN_TOKEN: token,
+        DEVICE_COOKIE_SECRET: secret,
+        PLAYBACK_DISABLED: "1",
       },
-    );
-    const proc = child;
-    const ready = new Promise<void>((ok, fail) => {
-      const drain = async (
-        stream: ReadableStream<Uint8Array>,
-        watchReady: boolean,
-      ) => {
-        const reader = stream.getReader();
-        const decoder = new TextDecoder();
-        let pending = "";
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              if (watchReady) {
-                fail(new Error(`Server exited before ready: ${output}`));
-              }
-              return;
-            }
-            const chunk = decoder.decode(value, { stream: true });
-            output += chunk;
-            pending += chunk;
-            for (
-              let end = pending.indexOf("\n");
-              end !== -1;
-              end = pending.indexOf("\n")
-            ) {
-              const line = pending.slice(0, end).trim();
-              pending = pending.slice(end + 1);
-              const match = /^JUKEBOX_READY ([1-9]\d*)$/.exec(line);
-              if (watchReady && match) {
-                base = `http://127.0.0.1:${match[1]}`;
-                ok();
-              }
-            }
-          }
-        } catch (error) {
-          if (watchReady) fail(error);
-        }
-      };
-      void drain(proc.stdout as ReadableStream<Uint8Array>, true);
-      void drain(proc.stderr as ReadableStream<Uint8Array>, false);
-      void proc.exited.then((code) => {
-        if (code !== 0) {
-          fail(new Error(`Server exited ${code}: ${output}`));
-        }
-      });
     });
-    await bounded(ready, `server ready (${output})`);
+    base = child.url;
   };
   const stopServer = async () => {
     if (!child) return;
-    child.kill();
-    try {
-      await bounded(child.exited, "server shutdown", 3000);
-    } catch {
-      child.kill("SIGKILL");
-      await bounded(child.exited, "forced shutdown", 3000);
-    }
+    await child.stop();
     child = undefined;
   };
   const call = async (
@@ -541,7 +488,7 @@ async function run() {
       "Isolated API flow passed (auth, cookies, metadata, limits, persistence, SSE).",
     );
   } catch (error) {
-    console.error("Isolated API flow failed; server output:\n", output);
+    console.error("Isolated API flow failed; server output:\n", child?.output);
     throw error;
   } finally {
     await stopServer();
