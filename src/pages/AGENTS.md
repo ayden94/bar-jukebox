@@ -1,18 +1,18 @@
 # src/pages — React UI (AGENTS.md: score 9, distinct domain)
 
 ## OVERVIEW
-Two React sub-apps (guest, admin) served through fluo ReactModule SSR + hydration; shared hooks, theme, and view types live at this level. entry-client.tsx / entry-server.ts are the Vite build entries.
+Two React sub-apps (guest, admin) served through fluo ReactNavigationPage SSR + hydration; app-document.tsx owns the shared document and persistent admin session. entry-client.tsx / entry-server.ts are the Vite build entries.
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Live state (SSE + polling fallback) | hooks.ts useJukeboxSnapshot | EventSource 자동 재연결; 끊긴 동안만 3s 폴링, 복구 시 중단 |
+| Live state (SSE + polling fallback) | snapshot-store.ts + hooks.ts useJukeboxSnapshot | 문서당 공유 연결, 마지막 구독/pagehide에서 정리, pageshow 복원 |
 | Toast / infinite scroll | hooks.ts | useToast, useInfiniteScroll |
 | Theme (light/dark/system) | theme.ts + theme-segment.tsx | 쿠키 bj_theme 3-상태(구 localStorage 자동 마이그레이션); 인라인 스크립트가 system을 matchMedia로 해석 — data-theme은 항상 구체값; UI는 게스트/관리자 공통 세그먼트 컨트롤 |
 | Guest flow | guest/guest-app.tsx | search → request → mini-player → full sheet → queue (cancel own) |
-| Admin flow | admin/songs-page.tsx · admin/qr-page.tsx | Per-route page documents sharing admin/session.tsx (AuthGate → chrome → SongsTab / QrTab) |
+| Admin flow | admin/songs-page.tsx · admin/qr-page.tsx | 독립 페이지 slot 밖 app-document.tsx가 AdminSession을 유지 |
 | Shared view types | types.ts | SongView/Snapshot mirror jukebox/types minus server-only fields |
-| Build entries | entry-client.tsx, entry-server.ts | client picks page via data-page; server re-exports the page documents |
+| Build entries | entry-client.tsx, entry-server.ts | HTTP initial payload + 공식 decoder와 Vite importer map으로 동일 페이지 선택 |
 | Styling | Tailwind utilities in TSX + tailwind.css/styles.css | Tailwind CSS v4 entry scopes scanning to src/pages; styles.css keeps theme tokens, base rules, keyframes, backdrop/pseudo, and print-only rules |
 
 ## CONVENTIONS (different from parent)

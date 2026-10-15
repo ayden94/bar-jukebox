@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
@@ -12,6 +13,7 @@ import {
   settingsService,
 } from "./domains/providers";
 import { initDatabase } from "./infra/db";
+import { themeScript } from "./pages/theme";
 
 // 재시작 시 SQLite에서 상태 복원 (큐/히스토리/재생중/설정)
 await initDatabase();
@@ -74,7 +76,13 @@ const adapter = BunHttpApplicationAdapter.create({
   port: PORT,
   idleTimeout: 255,
 });
-const app = await FluoFactory.create(AppModule, { adapter });
+const themeHash = createHash("sha256").update(themeScript).digest("base64");
+const app = await FluoFactory.create(AppModule, {
+  adapter,
+  securityHeaders: {
+    contentSecurityPolicy: `default-src 'self'; script-src 'self' 'sha256-${themeHash}'; img-src 'self' data:; style-src 'self' 'unsafe-inline'`,
+  },
+});
 
 await app.listen();
 

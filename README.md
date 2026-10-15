@@ -120,12 +120,35 @@ bun run typecheck      # TypeScript strict
 bun run check          # Biome lint + format
 bun run build && bun test-flow.ts # 임시 DB·임시 서버·고정 검색 데이터로 HTTP 회귀 검증
 bun run dev            # 개발 서버 (fluo dev)
+bun run dev:client     # 별도 터미널에서 클라이언트/CSS 빌드 감시
 ```
 
 플로우 검증은 운영 토큰이나 실행 중인 서버를 사용하지 않고, 실패하면 비정상 종료해요.
 실제 Music.app은 실행하지 않아요. 별도 수동 검증 서버가 필요하면
 `DATABASE_URL=:memory: PLAYBACK_DISABLED=1`로 실행할 수 있어요.
 운영에서는 `PLAYBACK_DISABLED`를 설정하지 마세요.
+
+### React 구성과 이동 검증
+
+`@fluojs/react 0.3.0`의 `ReactNavigationPage`와 공식 initial-page decoder를
+사용해 SSR과 hydration, 내부 이동을 연결해요. `/admin/songs`와 `/admin/qr`는
+서버 라우트와 페이지 컴포넌트를 따로 유지하고, 내부 이동에서는 공통 문서와
+`AdminSession`을 유지해요. 페이지별 검색 입력과 QR 펼침 상태는 이동 시 초기화돼요.
+SSE와 폴링은 문서당 브라우저 스토어 하나가 소유하며 `pagehide`에서 닫고
+`pageshow`에서 구독자가 있을 때 한 번만 다시 연결해요.
+
+현재 Bun 어댑터는 공식 Node starter의 단일 `fluo dev` Fast Refresh/CSS HMR
+지원 대상이 아니에요. 기존 두 개발 명령을 유지하고 Babel 7을 사용해요.
+배포할 때는 클라이언트와 서버를 함께 빌드하고 재시작해요.
+이미 열린 탭의 빌드가 달라지면 기본 문서 이동으로 새 버전을 불러와요.
+
+아래 검증은 운영 서버 대신 별도 DB와 재생 비활성화 서버를 사용해요.
+
+```bash
+PORT=5198 DATABASE_URL=:memory: ADMIN_TOKEN=react-qa-only PLAYBACK_DISABLED=1 bun start
+# 다른 터미널에서 실행해요 (Bun 1.4+, 설치된 Chrome 필요).
+REACT_TEST_URL=http://localhost:5198 REACT_TEST_ADMIN_TOKEN=react-qa-only bun tests/react-navigation.browser.ts
+```
 
 ## 📚 문서
 

@@ -14,6 +14,7 @@ import {
   createReactServerEntry,
   Path,
   ReactModule,
+  ReactNavigationPage,
   type ReactPageRenderer,
   Router,
 } from "@fluojs/react";
@@ -39,8 +40,9 @@ import {
   DeviceCookieMiddleware,
   deviceIdOf,
 } from "./middleware/device-cookie.middleware";
-import { AdminQrDocument, AdminSongsDocument } from "./pages/admin";
-import { GuestDocument } from "./pages/guest";
+import { AdminQrPage, AdminSongsPage } from "./pages/admin";
+import { AppDocument } from "./pages/app-document";
+import GuestPage from "./pages/guest/page";
 
 type JukeboxDrizzleTxOptions = NonNullable<
   Parameters<Drizzle["transaction"]>[1]
@@ -72,8 +74,43 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     );
   }
   const assets = manifestResult.manifest;
-  const renderPage: ReactPageRenderer = (page) =>
-    createReactServerEntry(page, assets.hydrationOptions);
+  const renderPage: ReactPageRenderer = (
+    page,
+    context,
+    _policies,
+    initialPage,
+  ) => {
+    if (!initialPage) {
+      return createReactServerEntry(page, {
+        ...assets.hydrationOptions,
+        headers: { "Cache-Control": "private, no-store" },
+      });
+    }
+    if (
+      !Object.hasOwn(
+        assets.assetMap,
+        `src/pages/${initialPage.payload.destination.module.slice(2)}`,
+      )
+    ) {
+      throw new Error("빌드된 페이지 모듈이 없어요");
+    }
+    return createReactServerEntry(
+      <AppDocument
+        buildId={assets.buildId}
+        initialPage={initialPage}
+        page={page}
+        route={{
+          params: context.request.params,
+          url: context.request.url,
+        }}
+        stylesheets={assets.css}
+      />,
+      {
+        ...assets.hydrationOptions,
+        headers: { "Cache-Control": "private, no-store" },
+      },
+    );
+  };
 
   @Inject(TableService)
   @Router()
@@ -87,26 +124,19 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       const tableId = Number(dto.t);
       const table =
         dto.t && dto.k ? await this.tableService.verify(tableId, dto.k) : null;
-      if (!table) {
-        return (
-          <GuestDocument
-            error={
-              dto.t
-                ? "QR 코드가 유효하지 않아요. 직원에게 문의해주세요"
-                : "테이블 QR 코드로 접속해주세요"
-            }
-            stylesheets={assets.css}
-            theme={dto.theme}
-          />
-        );
-      }
-      return (
-        <GuestDocument
-          stylesheets={assets.css}
-          tableLabel={table.label}
-          theme={dto.theme}
-        />
-      );
+      const props = {
+        error: table
+          ? ""
+          : dto.t
+            ? "QR 코드가 유효하지 않아요. 직원에게 문의해주세요"
+            : "테이블 QR 코드로 접속해주세요",
+        tableLabel: table?.label ?? "",
+        theme: dto.theme ?? "",
+      };
+      return ReactNavigationPage.create(<GuestPage {...props} />, {
+        module: "./guest/page.tsx",
+        props,
+      });
     }
   }
 
@@ -122,13 +152,19 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     @Path("/songs")
     @RequestDto(AdminPageDto)
     songs(dto: AdminPageDto) {
-      return <AdminSongsDocument stylesheets={assets.css} theme={dto.theme} />;
+      return ReactNavigationPage.create(<AdminSongsPage />, {
+        module: "./admin/songs-page.tsx",
+        props: { theme: dto.theme ?? "" },
+      });
     }
 
     @Path("/qr")
     @RequestDto(AdminPageDto)
     qr(dto: AdminPageDto) {
-      return <AdminQrDocument stylesheets={assets.css} theme={dto.theme} />;
+      return ReactNavigationPage.create(<AdminQrPage />, {
+        module: "./admin/qr-page.tsx",
+        props: { theme: dto.theme ?? "" },
+      });
     }
   }
 
@@ -269,6 +305,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       ReactModule.forRoot({
         controllers: [GuestPageRouter, AdminPageRouter],
         imports: [JukeboxDomainModule],
+        navigationBuildId: assets.buildId,
         renderPage,
       }),
     ],

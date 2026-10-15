@@ -1,2 +1,1 @@
-export { AdminQrDocument, AdminSongsDocument } from "./admin";
-export { GuestDocument } from "./guest";
+export { AppDocument } from "./app-document";

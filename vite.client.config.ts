@@ -21,7 +21,7 @@ export default defineConfig({
       output: {
         assetFileNames: "[name]-[hash][extname]",
         chunkFileNames: "[name]-[hash].js",
-        entryFileNames: "[name].js",
+        entryFileNames: "[name]-[hash].js",
       },
     },
     target: "es2022",
