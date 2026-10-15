@@ -3,6 +3,7 @@ import { type Client, createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { SCHEMA_DDL } from "../../infra/schema";
 import type { Song } from "../shared/types";
+import { PersistedSongError } from "./persisted-song";
 import { DrizzleQueueRepository } from "./queue.repository";
 import { QueueService } from "./queue.service";
 
@@ -240,4 +241,141 @@ test("실제 SQLite에서도 동시 신청 상한과 재생 전환 순서를 지
   expect((await repo.loadNowPlaying())?.song.id).toBe("c");
   expect(await repo.loadHistory()).toEqual([]);
   expect(await repo.loadQueue()).toEqual([]);
+});
+
+for (const table of ["queue", "history", "now_playing"] as const) {
+  for (const data of ["{비밀-원문", "null", "[]", '{"secret":"비밀-원문"}']) {
+    test(`${table} 복원은 잘못된 JSON이나 구조를 행 정보가 있는 오류로 알려요: ${data}`, async () => {
+      const { client, repo } = await fixture();
+      const rowId = table === "now_playing" ? 1 : "a";
+      await client.execute({
+        sql: `INSERT INTO ${table} (id, data, ${table === "now_playing" ? "started_at" : "position"}) VALUES (?, ?, 0)`,
+        args: [rowId, data],
+      });
+      const load = {
+        queue: () => repo.loadQueue(),
+        history: () => repo.loadHistory(),
+        now_playing: () => repo.loadNowPlaying(),
+      }[table];
+
+      const error = await load().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(PersistedSongError);
+      expect(error).toMatchObject({ table, rowId });
+      expect(String(error)).not.toContain("비밀-원문");
+      expect(error).not.toHaveProperty("cause");
+    });
+  }
+}
+
+const invalidFields: Record<keyof Song, unknown[]> = {
+  id: ["", 1, "다른 행"],
+  trackId: [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "97"],
+  trackName: ["", " ", null],
+  artistName: ["", null],
+  artworkUrl: [null, 1],
+  albumUrl: ["", "https://music.apple.com/album/1", "music://"],
+  trackNumber: [0, -1, 1.5, 201],
+  durationSec: [0, -1, "200"],
+  requestedBy: ["", null],
+  deviceId: ["", 1],
+  tableId: [0, -1, 1.5, "1"],
+  isStaff: [null, "true", 1],
+  requestedAt: [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, "123"],
+};
+
+for (const [field, values] of Object.entries(invalidFields)) {
+  for (const value of values) {
+    test(`대기열 복원은 ${field}의 잘못된 값 ${JSON.stringify(value)}을 거부해요`, async () => {
+      const { client, repo } = await fixture();
+      await client.execute({
+        sql: "INSERT INTO queue (id, data, position) VALUES ('a', ?, 0)",
+        args: [JSON.stringify({ ...song("a"), [field]: value })],
+      });
+
+      await expect(repo.loadQueue()).rejects.toBeInstanceOf(PersistedSongError);
+    });
+  }
+  test(`대기열 복원은 누락된 ${field} 필드를 거부해요`, async () => {
+    const { client, repo } = await fixture();
+    const stored: Record<string, unknown> = { ...song("a") };
+    delete stored[field];
+    await client.execute({
+      sql: "INSERT INTO queue (id, data, position) VALUES ('a', ?, 0)",
+      args: [JSON.stringify(stored)],
+    });
+
+    await expect(repo.loadQueue()).rejects.toBeInstanceOf(PersistedSongError);
+  });
+}
+
+test("복원은 짧은 식별자와 손님 소유권과 null 길이 및 시각을 보존해요", async () => {
+  const { repo } = await fixture();
+  const entry = song("a", {
+    deviceId: "기기",
+    tableId: 1,
+    isStaff: false,
+    durationSec: null,
+    requestedAt: 0,
+  });
+  await repo.insertQueueSong(entry);
+
+  expect(await repo.loadQueue()).toEqual([entry]);
+  await repo.takeAndStart(entry, 0);
+  expect(await repo.loadNowPlaying()).toEqual({ song: entry, startedAt: 0 });
+  await repo.finishNowPlaying(entry, "done", 1);
+  expect(await repo.loadHistory()).toEqual([entry]);
+});
+
+test("복원은 JSON 숫자의 오버플로를 유효한 길이로 받지 않아요", async () => {
+  const { client, repo } = await fixture();
+  await client.execute({
+    sql: "INSERT INTO queue (id, data, position) VALUES ('a', ?, 0)",
+    args: [
+      JSON.stringify(song("a")).replace(
+        '"durationSec":200',
+        '"durationSec":1e309',
+      ),
+    ],
+  });
+
+  await expect(repo.loadQueue()).rejects.toBeInstanceOf(PersistedSongError);
+});
+
+test("재생 중 복원은 잘못된 시작 시각을 명시적 오류로 알려요", async () => {
+  const { client, repo } = await fixture();
+  await client.execute({
+    sql: "INSERT INTO now_playing (id, data, started_at) VALUES (1, ?, -1)",
+    args: [JSON.stringify(song("a"))],
+  });
+
+  await expect(repo.loadNowPlaying()).rejects.toMatchObject({
+    table: "now_playing",
+    rowId: 1,
+    code: "invalid-started-at",
+  });
+});
+
+test("히스토리 재작성은 상한 밖의 손상된 행도 거부하고 원본과 재생 중 곡을 보존해요", async () => {
+  const { client, repo } = await fixture();
+  const entry = song("a");
+  await repo.insertQueueSong(entry);
+  await repo.takeAndStart(entry, 123);
+  await client.execute({
+    sql: "INSERT INTO history (id, data, position) VALUES ('b', ?, 0), ('c', ?, 1)",
+    args: [JSON.stringify(song("b")), '{"secret":"유실하면 안 되는 원문"}'],
+  });
+  const before = await client.execute(
+    "SELECT * FROM history ORDER BY position",
+  );
+
+  await expect(repo.finishNowPlaying(entry, "done", 1)).rejects.toMatchObject({
+    table: "history",
+    rowId: "c",
+  });
+
+  expect(
+    (await client.execute("SELECT * FROM history ORDER BY position")).rows,
+  ).toEqual(before.rows);
+  expect(await repo.loadNowPlaying()).toEqual({ song: entry, startedAt: 123 });
 });

@@ -2,6 +2,11 @@ import { asc, eq, sql } from "drizzle-orm";
 import type { Drizzle } from "../../infra/db";
 import { history, nowPlaying, queue } from "../../infra/schema";
 import type { Song } from "../shared/types";
+import {
+  decodePersistedSong,
+  isStoredTimestamp,
+  PersistedSongError,
+} from "./persisted-song";
 
 export type StoredNowPlaying = { song: Song; startedAt: number };
 type Transaction = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
@@ -28,14 +33,6 @@ export interface QueueRepository {
   ): Promise<void>;
 }
 
-function parseSong(json: string): Song | null {
-  try {
-    return JSON.parse(json) as Song;
-  } catch {
-    return null;
-  }
-}
-
 export class DrizzleQueueRepository implements QueueRepository {
   private writeChain: Promise<void> = Promise.resolve();
 
@@ -56,9 +53,7 @@ export class DrizzleQueueRepository implements QueueRepository {
       .select()
       .from(queue)
       .orderBy(asc(queue.position));
-    return rows
-      .map((row) => parseSong(row.data))
-      .filter((song): song is Song => song !== null);
+    return rows.map((row) => decodePersistedSong(row.data, "queue", row.id));
   }
 
   async loadHistory(): Promise<Song[]> {
@@ -66,9 +61,7 @@ export class DrizzleQueueRepository implements QueueRepository {
       .select()
       .from(history)
       .orderBy(asc(history.position));
-    return rows
-      .map((row) => parseSong(row.data))
-      .filter((song): song is Song => song !== null);
+    return rows.map((row) => decodePersistedSong(row.data, "history", row.id));
   }
 
   async loadNowPlaying(): Promise<StoredNowPlaying | null> {
@@ -78,8 +71,11 @@ export class DrizzleQueueRepository implements QueueRepository {
       .where(eq(nowPlaying.id, 1));
     const row = rows[0];
     if (!row) return null;
-    const song = parseSong(row.data);
-    return song ? { song, startedAt: row.startedAt } : null;
+    const song = decodePersistedSong(row.data, "now_playing", row.id);
+    if (!isStoredTimestamp(row.startedAt)) {
+      throw new PersistedSongError("now_playing", row.id, "invalid-started-at");
+    }
+    return { song, startedAt: row.startedAt };
   }
 
   insertQueueSong(song: Song): Promise<void> {
@@ -190,8 +186,7 @@ export class DrizzleQueueRepository implements QueueRepository {
             .from(history)
             .orderBy(asc(history.position));
           const existing = rows
-            .map((row) => parseSong(row.data))
-            .filter((stored): stored is Song => stored !== null)
+            .map((row) => decodePersistedSong(row.data, "history", row.id))
             .slice(0, Math.max(0, max - 1));
           await tx.delete(history);
           await tx.insert(history).values(
