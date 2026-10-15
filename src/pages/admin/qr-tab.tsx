@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { apiErrorMessage } from "../shared";
 import type { TableRow } from "../types";
 import { admin } from "./styles";
+import { UnsavedChanges } from "./unsaved-changes";
 
 type QrTabProps = {
   api: (path: string, opts?: RequestInit) => Promise<Response>;
@@ -249,6 +250,7 @@ export function QrTab({ api }: QrTabProps) {
           {printing ? "인쇄 준비 중이에요" : "테이블 QR 전체 인쇄"}
         </button>
       </div>
+      <UnsavedChanges dirty={label.length > 0} pending={busyKeys.size > 0} />
       <div className="grid grid-cols-[300px_minmax(0,1fr)] items-start gap-[var(--admin-gap)] max-[960.001px]:grid-cols-[260px_minmax(0,1fr)] max-[640.001px]:grid-cols-[minmax(0,1fr)]">
         <section className={admin.panel}>
           <div className={admin.panelHead}>

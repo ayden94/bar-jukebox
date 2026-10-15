@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { admin } from "./styles";
+import { UnsavedChanges } from "./unsaved-changes";
 
 type SettingsPatch = {
   requestsPaused?: boolean;
@@ -13,8 +14,15 @@ type SettingsPanelProps = {
   notice?: string;
   maxPerDevice: number;
   maxPerTable: number;
-  onSave: (patch: SettingsPatch) => void;
+  onSave: (patch: SettingsPatch) => Promise<void> | void;
 };
+
+function useConfirmedDraft(current: string, saving: boolean) {
+  const [draft, setDraft] = useState<string | null>(null);
+  // 서버가 확인한 초안만 해제하고, 저장 중 바뀐 입력은 그대로 유지해요.
+  if (!saving && draft === current) setDraft(null);
+  return [draft ?? current, setDraft] as const;
+}
 
 export function SettingsPanel({
   requestsPaused,
@@ -23,21 +31,37 @@ export function SettingsPanel({
   maxPerTable,
   onSave,
 }: SettingsPanelProps) {
-  const [noticeInput, setNoticeInput] = useState(notice ?? "");
-  const [noticeDirty, setNoticeDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [noticeInput, setNoticeDraft] = useConfirmedDraft(notice ?? "", saving);
+  const [deviceLimit, setDeviceDraft] = useConfirmedDraft(
+    String(maxPerDevice),
+    saving,
+  );
+  const [tableLimit, setTableDraft] = useConfirmedDraft(
+    String(maxPerTable),
+    saving,
+  );
+  const pendingSave = useRef(false);
+  const dirty =
+    noticeInput !== (notice ?? "") ||
+    deviceLimit !== String(maxPerDevice) ||
+    tableLimit !== String(maxPerTable);
 
-  useEffect(() => {
-    if (notice === undefined) return;
-    if (noticeDirty && notice === noticeInput) setNoticeDirty(false);
-    else if (!noticeDirty) setNoticeInput(notice);
-  }, [notice, noticeDirty, noticeInput]);
-  const [deviceLimit, setDeviceLimit] = useState(String(maxPerDevice));
-  const [tableLimit, setTableLimit] = useState(String(maxPerTable));
-
-  useEffect(() => {
-    setDeviceLimit(String(maxPerDevice));
-    setTableLimit(String(maxPerTable));
-  }, [maxPerDevice, maxPerTable]);
+  const save = async (patch: SettingsPatch) => {
+    if (pendingSave.current) return;
+    pendingSave.current = true;
+    setSaving(true);
+    try {
+      await onSave(patch);
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "저장하지 못했어요",
+      );
+    } finally {
+      pendingSave.current = false;
+      setSaving(false);
+    }
+  };
 
   const saveLimits = () => {
     const d = Number(deviceLimit);
@@ -53,7 +77,9 @@ export function SettingsPanel({
       window.alert("곡 수 제한은 0~99 사이 숫자여야 해요 (0은 무제한)");
       return;
     }
-    onSave({ maxPerDevice: d, maxPerTable: t });
+    setDeviceDraft(String(d));
+    setTableDraft(String(t));
+    void save({ maxPerDevice: d, maxPerTable: t });
   };
 
   return (
@@ -61,6 +87,7 @@ export function SettingsPanel({
       <div className={admin.panelHead}>
         <h2 id="settings-heading">운영 설정</h2>
       </div>
+      <UnsavedChanges dirty={dirty} pending={saving} />
       <div className="flex items-center justify-between gap-3 [&_strong]:text-[0.85rem]">
         <div>
           <strong>
@@ -78,10 +105,19 @@ export function SettingsPanel({
           role="switch"
           aria-checked={!requestsPaused}
           aria-label="손님 곡 신청 받기"
-          onClick={() => onSave({ requestsPaused: !requestsPaused })}
+          disabled={saving}
+          onClick={() => void save({ requestsPaused: !requestsPaused })}
         >
           <span
-            className={`block h-[22px] w-[38px] rounded-[99px] p-[3px] ${requestsPaused ? "bg-[var(--admin-muted)]" : "bg-[var(--admin-accent)]"} [&>span]:block [&>span]:size-4 [&>span]:rounded-full [&>span]:bg-[var(--admin-panel)] ${requestsPaused ? "" : "[&>span]:translate-x-4 [&>span]:bg-[var(--admin-accent-text)]"}`}
+            className={`block h-[22px] w-[38px] rounded-[99px] p-[3px] ${
+              requestsPaused
+                ? "bg-[var(--admin-muted)]"
+                : "bg-[var(--admin-accent)]"
+            } [&>span]:block [&>span]:size-4 [&>span]:rounded-full [&>span]:bg-[var(--admin-panel)] ${
+              requestsPaused
+                ? ""
+                : "[&>span]:translate-x-4 [&>span]:bg-[var(--admin-accent-text)]"
+            }`}
             aria-hidden="true"
           >
             <span />
@@ -93,8 +129,8 @@ export function SettingsPanel({
         onSubmit={(event) => {
           event.preventDefault();
           const trimmed = noticeInput.trim();
-          setNoticeInput(trimmed);
-          onSave({ notice: trimmed });
+          setNoticeDraft(trimmed);
+          void save({ notice: trimmed });
         }}
       >
         <label className={admin.fieldLabel} htmlFor="notice-input">
@@ -107,8 +143,7 @@ export function SettingsPanel({
           maxLength={200}
           value={noticeInput}
           onChange={(e) => {
-            setNoticeDirty(true);
-            setNoticeInput(e.currentTarget.value);
+            setNoticeDraft(e.currentTarget.value);
           }}
         />
         <div className="mt-3 flex items-center justify-end gap-3">
@@ -117,6 +152,7 @@ export function SettingsPanel({
           </span>
           <button
             className={`${admin.button} ${admin.ghost} admin-button`}
+            disabled={saving}
             type="submit"
           >
             공지 저장
@@ -142,7 +178,7 @@ export function SettingsPanel({
               inputMode="numeric"
               required
               value={deviceLimit}
-              onChange={(e) => setDeviceLimit(e.currentTarget.value)}
+              onChange={(e) => setDeviceDraft(e.currentTarget.value)}
             />
           </div>
           <div>
@@ -155,7 +191,7 @@ export function SettingsPanel({
               inputMode="numeric"
               required
               value={tableLimit}
-              onChange={(e) => setTableLimit(e.currentTarget.value)}
+              onChange={(e) => setTableDraft(e.currentTarget.value)}
             />
           </div>
         </div>
@@ -163,6 +199,7 @@ export function SettingsPanel({
         <div className="mt-3 flex items-center justify-end gap-3">
           <button
             className={`${admin.button} ${admin.ghost} admin-button`}
+            disabled={saving}
             type="submit"
           >
             제한 저장
