@@ -1,4 +1,4 @@
-import { Link } from "@fluojs/react/client";
+import { Link, useRouter, useRouterState } from "@fluojs/react/client";
 import {
   createContext,
   type ReactNode,
@@ -13,6 +13,7 @@ import { apiErrorMessage } from "../shared";
 import { useTheme } from "../theme";
 import type { Snapshot } from "../types";
 import { AuthGate } from "./auth-gate";
+import { NavigationFeedback } from "./navigation-feedback";
 import { admin } from "./styles";
 
 export type AdminTabId = "songs" | "qr";
@@ -55,7 +56,10 @@ export function AdminSession({
   const [tokenInput, setTokenInput] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const { snap, refresh } = useJukeboxSnapshot(authed);
+  const router = useRouter();
+  const session = useRouterState().session;
+  const revoked = session !== undefined && session.status !== "approved";
+  const { snap, refresh } = useJukeboxSnapshot(authed && !revoked);
   const pending = useRef(new Set<string>());
   const loginPending = useRef(false);
 
@@ -68,10 +72,14 @@ export function AdminSession({
           "x-admin-token": token,
         },
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         window.localStorage.removeItem("bj_admin");
         setToken("");
         setAuthed(false);
+        await router.sessionChanged({
+          epoch: crypto.randomUUID(),
+          reason: res.status === 401 ? "logout" : "permissions",
+        });
       }
       if (!res.ok) {
         const data = await res
@@ -84,25 +92,43 @@ export function AdminSession({
       }
       return res;
     },
-    [token],
+    [token, router],
   );
 
   useEffect(() => {
+    if (revoked) {
+      window.localStorage.removeItem("bj_admin");
+      setToken("");
+      setAuthed(false);
+      setLoginError(
+        session?.status === "forbidden"
+          ? "접근 권한이 없어요. 관리자 비밀번호를 다시 확인해주세요."
+          : "관리자 인증이 만료됐어요. 다시 로그인해주세요.",
+      );
+      return;
+    }
     const saved =
       typeof window === "undefined"
         ? ""
         : (window.localStorage.getItem("bj_admin") ?? "");
     if (!saved) return;
+    let active = true;
     setToken(saved);
     fetch("/api/admin/tables", { headers: { "x-admin-token": saved } })
       .then((r) => {
+        if (!active) return;
         if (r.ok) setAuthed(true);
-        else if (r.status === 401) {
+        else if (r.status === 401 || r.status === 403) {
           window.localStorage.removeItem("bj_admin");
         } else setLoginError(`관리자 연결 실패 (HTTP ${r.status})`);
       })
-      .catch(() => setLoginError("관리자 연결에 실패했어요"));
-  }, []);
+      .catch(() => {
+        if (active) setLoginError("관리자 연결에 실패했어요");
+      });
+    return () => {
+      active = false;
+    };
+  }, [revoked, session?.status]);
 
   // 해시(#qr) 시절 북마크를 실제 라우트로 넘긴다.
   useEffect(() => {
@@ -129,6 +155,10 @@ export function AdminSession({
         return;
       }
       window.localStorage.setItem("bj_admin", tokenInput);
+      if (revoked) {
+        window.location.reload();
+        return;
+      }
       setToken(tokenInput);
       setAuthed(true);
     } catch {
@@ -160,7 +190,7 @@ export function AdminSession({
     }
   };
 
-  if (!authed) {
+  if (!authed || revoked) {
     return (
       <AuthGate
         onLogin={login}
@@ -231,6 +261,7 @@ export function AdminSession({
             </select>
           </div>
         </header>
+        <NavigationFeedback />
         <AdminSessionContext.Provider value={{ act, api, snap }}>
           <main>{children}</main>
         </AdminSessionContext.Provider>

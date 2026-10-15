@@ -4,7 +4,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { startServerProcess } from "./server-process";
 
-export async function createIsolatedServer() {
+type IsolatedServerOptions = {
+  readonly intercept?: (
+    request: Request,
+  ) => Response | undefined | Promise<Response | undefined>;
+};
+
+export async function createIsolatedServer(
+  options: IsolatedServerOptions = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "jukebox-browser-"));
   const token = randomBytes(32).toString("hex");
   try {
@@ -37,6 +45,8 @@ export async function createIsolatedServer() {
           onPageShow?.(url.searchParams.get("persisted") === "true");
           return new Response(null, { status: 204 });
         }
+        const intercepted = await options.intercept?.(request);
+        if (intercepted) return intercepted;
         const target = new URL(url.pathname + url.search, server.url);
         if (url.pathname !== "/api/events") {
           const response = await fetch(new Request(target, request), {

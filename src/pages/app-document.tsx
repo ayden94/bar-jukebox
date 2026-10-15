@@ -7,6 +7,10 @@ import {
   useRouterState,
 } from "@fluojs/react/client";
 import type { ReactElement, ReactNode } from "react";
+import {
+  adminNavigationFailurePolicy,
+  adminSessionPolicy,
+} from "./admin/navigation-policy";
 import { AdminSession } from "./admin/session";
 import {
   bakedTheme,
@@ -112,6 +116,8 @@ export function AppDocument({
       initialSnapshot={createReactRouteSnapshot(route)}
       navigationBuildId={buildId}
       navigationModules={navigationModules}
+      failurePolicy={adminNavigationFailurePolicy}
+      session={{ epoch: "jukebox-document", policy: adminSessionPolicy }}
     >
       {(destination) => (
         <DocumentShell
