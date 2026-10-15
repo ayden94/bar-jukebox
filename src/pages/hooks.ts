@@ -1,52 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Snapshot } from "./types";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { getBrowserSnapshotStore, getServerSnapshot } from "./snapshot-store";
 
 export function useJukeboxSnapshot(enabled: boolean) {
-  const [snap, setSnap] = useState<Snapshot | null>(null);
-  const version = useRef(0);
-  const active = useRef(false);
+  const store = getBrowserSnapshotStore();
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!enabled || !store) return () => {};
+      return store.subscribe(listener);
+    },
+    [enabled, store],
+  );
+  const snap = useSyncExternalStore(
+    subscribe,
+    enabled && store ? store.getSnapshot : getServerSnapshot,
+    getServerSnapshot,
+  );
   const refresh = useCallback(async () => {
-    const current = ++version.current;
-    try {
-      const response = await fetch("/api/state");
-      if (!response.ok) return;
-      const data = (await response.json()) as Snapshot;
-      if (active.current && current === version.current) setSnap(data);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!enabled) return;
-    active.current = true;
-    let poll: number | null = null;
-    // EventSource reconnects on its own; polling covers the disconnected window.
-    const es = new EventSource("/api/events");
-    const stopPoll = () => {
-      if (poll !== null) window.clearInterval(poll);
-      poll = null;
-    };
-    es.onopen = stopPoll;
-    es.addEventListener("state", (e) => {
-      try {
-        const data = JSON.parse((e as MessageEvent).data) as Snapshot;
-        ++version.current;
-        setSnap(data);
-        stopPoll();
-      } catch {}
-    });
-    es.onerror = () => {
-      if (poll === null) {
-        void refresh();
-        poll = window.setInterval(refresh, 3000);
-      }
-    };
-    return () => {
-      active.current = false;
-      ++version.current;
-      es.close();
-      stopPoll();
-    };
-  }, [enabled, refresh]);
+    if (enabled && store) await store.refresh();
+  }, [enabled, store]);
 
   return { snap, refresh };
 }
