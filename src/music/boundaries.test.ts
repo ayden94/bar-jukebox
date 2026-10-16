@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { isBuiltin } from "node:module";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "@babel/parser";
@@ -115,6 +116,19 @@ function checkBoundaries(graph: ModuleGraph): readonly Violation[] {
       const reject = (rule: string) =>
         violations.push({ file, dependency, rule });
       if (
+        dependency.startsWith("src/music/contracts/") &&
+        !file.startsWith("src/music/contracts/") &&
+        dependency !== "src/music/contracts/index.ts"
+      ) {
+        reject("contracts-private-import");
+      }
+      if (
+        /^src\/music\/testing(?:\/|$)/.test(dependency) &&
+        !file.startsWith("src/music/testing/")
+      ) {
+        reject("production-testing-import");
+      }
+      if (
         toProvider &&
         fromProvider !== toProvider &&
         !/^src\/music\/providers\/[^/]+\/(?:(?:server|browser)\/)?index\.ts$/.test(
@@ -171,7 +185,8 @@ function checkBoundaries(graph: ModuleGraph): readonly Violation[] {
         }
         if (
           isBrowser &&
-          (/^(?:node:|bun(?::|$))/.test(dependency) ||
+          (isBuiltin(dependency) ||
+            /^(?:node:|bun(?::|$))/.test(dependency) ||
             /^src\/music\/providers\/[^/]+\/server\//.test(dependency))
         ) {
           violations.push({ file, dependency, rule: "browser-server" });
@@ -194,8 +209,7 @@ test("모듈 경계: 실제 소스는 공개 배럴과 실행 환경 경계를 �
     if (
       /\.test\.tsx?$/.test(file) ||
       file.endsWith(".d.ts") ||
-      file.endsWith("/test-support.ts") ||
-      file.startsWith("src/music/testing/")
+      file.endsWith("/test-support.ts")
     ) {
       continue;
     }
@@ -357,5 +371,74 @@ test("모듈 경계: 공통 계약에 프레임워크 타입도 유입되지 않
     file: "src/music/contracts/catalog.ts",
     dependency: "react",
     rule: "contracts-implementation",
+  });
+});
+
+test("모듈 경계: 코어의 타입 import도 공통 계약 배럴을 거쳐요", () => {
+  const graph = new Map([
+    [
+      "src/domains/queue/queue.service.ts",
+      'import type { PlaybackPort } from "../../music/contracts/playback";',
+    ],
+    ["src/music/contracts/playback.ts", "export interface PlaybackPort {}"],
+  ]);
+
+  expect(checkBoundaries(graph)).toContainEqual({
+    file: "src/domains/queue/queue.service.ts",
+    dependency: "src/music/contracts/playback.ts",
+    rule: "contracts-private-import",
+  });
+});
+
+test("모듈 경계: 공통 계약의 내부 참조와 외부 배럴 접근은 허용해요", () => {
+  const graph = new Map([
+    [
+      "src/domains/queue/queue.service.ts",
+      'import type { PlaybackPort } from "../../music/contracts";',
+    ],
+    [
+      "src/music/contracts/index.ts",
+      'export type { PlaybackPort } from "./playback";',
+    ],
+    ["src/music/contracts/playback.ts", "export interface PlaybackPort {}"],
+  ]);
+
+  expect(checkBoundaries(graph)).toEqual([]);
+});
+
+test.each(["fs", "fs/promises", "node:fs", "node:fs/promises"])(
+  "모듈 경계: 브라우저에서 Node 파일 시스템 표기 %s를 거절해요",
+  (specifier) => {
+    const graph = new Map([
+      [
+        "src/music/providers/example/browser/index.ts",
+        `import { readFile } from ${JSON.stringify(specifier)};`,
+      ],
+    ]);
+
+    expect(checkBoundaries(graph)).toContainEqual({
+      file: "src/music/providers/example/browser/index.ts",
+      dependency: specifier,
+      rule: "browser-server",
+    });
+  },
+);
+
+test("모듈 경계: 제품 조립에 테스트 공급자 배럴이 유입되지 않아요", () => {
+  const graph = new Map([
+    [
+      "src/domains/providers.ts",
+      'import { createContrastingProvider } from "../music/testing";',
+    ],
+    [
+      "src/music/testing/index.ts",
+      "export const createContrastingProvider = () => 1;",
+    ],
+  ]);
+
+  expect(checkBoundaries(graph)).toContainEqual({
+    file: "src/domains/providers.ts",
+    dependency: "src/music/testing/index.ts",
+    rule: "production-testing-import",
   });
 });
