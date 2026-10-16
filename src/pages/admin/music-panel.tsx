@@ -313,16 +313,17 @@ export function MusicConnectionPanel({
             연결 가능한 기기 조회
           </button>
         )}
-        {snapshot.actions.disconnectTarget && snapshot.connectedTarget && (
-          <button
-            className={`${admin.button} ${admin.ghost}`}
-            disabled={pending}
-            onClick={() => void onAction("/targets/disconnect")}
-            type="button"
-          >
-            재생 기기 연결 해제
-          </button>
-        )}
+        {snapshot.actions.disconnectTarget &&
+          (snapshot.connectedTarget || snapshot.owner) && (
+            <button
+              className={`${admin.button} ${admin.ghost}`}
+              disabled={pending}
+              onClick={() => void onAction("/targets/disconnect")}
+              type="button"
+            >
+              재생 기기 연결 해제
+            </button>
+          )}
       </div>
       {targets.length > 0 && (
         <ul className="mt-4 list-none space-y-3 p-0">

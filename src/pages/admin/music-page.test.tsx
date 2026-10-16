@@ -35,6 +35,48 @@ test("음악 페이지: 독립 페이지 default export를 관리자 배럴에�
   expect(AdminMusicPage).toBe(MusicPage);
 });
 
+test("현재 연결이 없어도 저장된 owner를 명시적으로 해제할 수 있어요", async () => {
+  const model: MusicSnapshot = {
+    ...(await snapshot()),
+    readiness: "unavailable",
+    connectedTarget: null,
+    owner: {
+      executorSessionId: "previous",
+      location: "server",
+      expiresAt: null,
+    },
+    actions: {
+      connectAuth: false,
+      disconnectAuth: false,
+      listTargets: false,
+      connectTarget: false,
+      disconnectTarget: true,
+    },
+  };
+  const buttons: (string | null)[] = [];
+  await new HTMLRewriter()
+    .on("button", {
+      element: (element) => {
+        buttons.push(element.getAttribute("disabled"));
+      },
+    })
+    .transform(
+      new Response(
+        renderToStaticMarkup(
+          <MusicConnectionPanel
+            snapshot={model}
+            targets={[]}
+            pending={false}
+            onAction={async () => true}
+            onLoadTargets={async () => {}}
+          />,
+        ),
+      ),
+    )
+    .text();
+  expect(buttons).toEqual([null]);
+});
+
 for (const route of ["music", "songs", "qr"]) {
   test(`관리자 문서: ${route} 경로는 같은 셸에서 해당 페이지 식별자를 사용해요`, async () => {
     const url = `http://localhost/admin/${route}`;

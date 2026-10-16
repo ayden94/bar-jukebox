@@ -225,7 +225,9 @@ export async function createJukeboxRuntime(
                 ? null
                 : "재생 기기가 선택되지 않았거나 연결을 확인할 수 없어요.")),
           auth,
-          connectedTarget: owner?.connection ?? null,
+          connectedTarget: snapshot.ownerConnected
+            ? (owner?.connection ?? null)
+            : null,
           owner: owner
             ? {
                 executorSessionId: owner.executorSessionId,

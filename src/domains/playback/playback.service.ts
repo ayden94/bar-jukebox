@@ -138,13 +138,23 @@ export class PlaybackService {
 
   async snapshot(): Promise<PlaybackSnapshot> {
     const { owner, attempt, commands } = await this.repository.snapshot();
+    const serverConnected =
+      this.connection?.location === "server" &&
+      owner?.connection.location === "server" &&
+      this.connection.connectionGeneration ===
+        owner.connection.connectionGeneration &&
+      this.connection.target.providerId ===
+        owner.connection.target.providerId &&
+      this.connection.target.modeId === owner.connection.target.modeId &&
+      this.connection.target.targetId === owner.connection.target.targetId;
     return {
       owner,
       ownerConnected:
         owner !== null &&
         !owner.released &&
-        (owner.connection.location === "server" ||
-          this.now() - owner.heartbeatAt <
+        (owner.connection.location === "server"
+          ? serverConnected
+          : this.now() - owner.heartbeatAt <
             (this.options.heartbeatTimeoutMs ?? 15000)),
       attempt,
       commands: commands.filter(
