@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { art, fmt, playbackStatusLabel } from "../shared";
 import type { NowPlayingView } from "../types";
 import { admin } from "./styles";
+import type { RecoveryFence, RecoveryState } from "./use-recovery-fence";
 
 export function NowPlayingCard({
   np,
@@ -9,16 +10,17 @@ export function NowPlayingCard({
   onTogglePlayback,
   onSkip,
   onConfirmStopped,
+  recovery,
 }: {
   np: NowPlayingView | null;
   onPrevious: () => Promise<void>;
   onTogglePlayback: () => Promise<void>;
   onSkip: () => Promise<void>;
-  onConfirmStopped: () => Promise<void>;
+  onConfirmStopped: (fence: RecoveryFence) => Promise<void>;
+  recovery?: RecoveryState;
 }) {
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
-  const [confirmedSongId, setConfirmedSongId] = useState<string | null>(null);
   const npSong = np?.song ?? null;
   const paused = np?.status === "paused";
   const canControl = np?.status === "playing" || paused;
@@ -195,35 +197,80 @@ export function NowPlayingCard({
         </button>
       </fieldset>
       {np && needsConfirmation ? (
-        <fieldset className="mt-4 min-w-0 border-0 p-0" disabled={pending}>
-          <legend className="font-bold">재생 상태 확인</legend>
-          <p className={admin.note}>
-            음악 앱이나 재생 기기에서 오디오를 직접 멈춘 뒤 확인해주세요.
-            확인하면 현재 신청을 마치고 다음 곡으로 넘어가요.
-          </p>
-          <label className="my-3 flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-            <input
-              className="!size-5 !min-h-0 shrink-0"
-              type="checkbox"
-              checked={confirmedSongId === np.song.id}
-              onChange={(event) =>
-                setConfirmedSongId(
-                  event.currentTarget.checked ? np.song.id : null,
-                )
-              }
-            />
-            실제 오디오가 멈춘 것을 확인했어요
-          </label>
-          <button
-            className={`${admin.button} ${admin.ghost} min-h-11`}
-            type="button"
-            disabled={pending || confirmedSongId !== np.song.id}
-            onClick={() => void control(onConfirmStopped)}
-          >
-            정지 확인 후 넘기기
-          </button>
-        </fieldset>
+        <StoppedConfirmation
+          key={recovery?.key ?? np.song.id}
+          pending={pending}
+          recovery={recovery}
+          songId={np.song.id}
+          onConfirm={(fence) => control(() => onConfirmStopped(fence))}
+        />
       ) : null}
     </section>
+  );
+}
+
+function StoppedConfirmation({
+  pending,
+  recovery,
+  songId,
+  onConfirm,
+}: {
+  pending: boolean;
+  recovery: RecoveryState | undefined;
+  songId: string;
+  onConfirm: (fence: RecoveryFence) => Promise<void>;
+}) {
+  const [confirmedFence, setConfirmedFence] = useState<RecoveryFence | null>(
+    null,
+  );
+  const fence =
+    recovery?.fence?.expectedSongId === songId ? recovery.fence : null;
+  const checked = fence !== null && confirmedFence === fence;
+  return (
+    <fieldset className="mt-4 min-w-0 border-0 p-0" disabled={pending}>
+      <legend className="font-bold">재생 상태 확인</legend>
+      <p className={admin.note}>
+        음악 앱이나 재생 기기에서 오디오를 직접 멈춘 뒤 확인해주세요. 확인하면
+        현재 신청을 마치고 다음 곡으로 넘어가요.
+      </p>
+      <p className={admin.note} role="status">
+        {recovery?.pending
+          ? "표시한 곡의 재생 시도와 주체를 확인하고 있어요."
+          : recovery?.error ||
+            (!fence ? "재생 상태를 다시 확인한 뒤 정지를 확인해주세요." : "")}
+      </p>
+      <label className="my-3 flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+        <input
+          className="!size-5 !min-h-0 shrink-0"
+          type="checkbox"
+          disabled={pending || !fence}
+          checked={checked}
+          onChange={(event) =>
+            setConfirmedFence(event.currentTarget.checked ? fence : null)
+          }
+        />
+        실제 오디오가 멈춘 것을 확인했어요
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className={`${admin.button} ${admin.ghost} min-h-11`}
+          type="button"
+          disabled={pending || !checked}
+          onClick={() => {
+            if (fence && checked) void onConfirm(fence);
+          }}
+        >
+          정지 확인 후 넘기기
+        </button>
+        <button
+          className={`${admin.button} ${admin.ghost} min-h-11`}
+          type="button"
+          disabled={pending || !recovery || recovery.pending}
+          onClick={recovery?.refresh}
+        >
+          재생 상태 다시 확인
+        </button>
+      </div>
+    </fieldset>
   );
 }

@@ -17,6 +17,19 @@ const track: TrackMetadata = {
 const artwork: ArtworkPort = {
   fetch: async () => ({ ok: false, error: { code: "invalid-track" } }),
 };
+
+test("설정되지 않은 음악 서비스는 임의 공급자로 검색하거나 신청하지 않아요", async () => {
+  const service = new SearchService(null, null, null);
+  await expect(service.search("곡")).rejects.toMatchObject({
+    code: "upstream-unavailable",
+  });
+  await expect(service.lookup(track.ref)).rejects.toMatchObject({
+    code: "upstream-unavailable",
+  });
+  expect(
+    await service.fetchArtwork({ providerId: "fixture", artworkId: "x" }),
+  ).toBeNull();
+});
 function fixture(overrides: Partial<CatalogPort> = {}) {
   const catalog: CatalogPort = {
     search: async () => ({

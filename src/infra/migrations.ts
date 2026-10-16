@@ -7,7 +7,7 @@ import {
 import type { Song } from "../domains/shared/types";
 import { SCHEMA_DDL } from "./schema";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 function migrateSong(
   json: string,
@@ -82,12 +82,15 @@ export async function readSchemaVersion(
 export async function migrateDatabase(client: Client): Promise<void> {
   const tx = await client.transaction("write");
   try {
-    if ((await readSchemaVersion(tx)) === SCHEMA_VERSION) {
+    const version = await readSchemaVersion(tx);
+    if (version === SCHEMA_VERSION) {
       await tx.commit();
       return;
     }
     await tx.executeMultiple(SCHEMA_DDL);
-    for (const table of ["queue", "history", "now_playing"] as const) {
+    for (const table of version === 0
+      ? (["queue", "history", "now_playing"] as const)
+      : []) {
       const rows = (await tx.execute(`SELECT * FROM ${table}`)).rows;
       for (const row of rows) {
         const id = row.id;

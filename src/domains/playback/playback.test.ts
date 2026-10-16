@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { connection, FakePlayer, fixture, song, state } from "./test-support";
+import { FakePlayer, fixture, song, state } from "./test-support";
 
 test("재생은 예약 저장 뒤 실행하고 접수만으로 playing을 만들지 않아요", async () => {
   await using f = await fixture();
@@ -83,23 +83,12 @@ test("복원된 다른 공급자 곡은 보존하고 외부 명령을 보내지 
 test("복원 후 명시적 제어는 binding의 일치를 확인한 실행만 이어 받아요", async () => {
   await using f = await fixture();
   await f.queue.enqueue(song("a"));
-  await f.queue.takeAndStart();
   const player = new FakePlayer();
-  await player.execute(
-    {
-      type: "play",
-      trackRef: song("a").ref,
-      initialState: "playing",
-      context: {
-        target: connection.target,
-        connectionGeneration: connection.connectionGeneration,
-        commandId: "existing-command",
-        attemptId: "existing-attempt",
-        executorSessionId: "existing-executor",
-      },
-    },
-    new AbortController().signal,
-  );
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const first = f.start(player);
+  await playing;
+  const original = player.current.correlation!;
+  await first.playback.dispose();
   const { playback } = f.start(player);
   expect(f.queue.snapshot().nowPlaying?.status).toBe("reconciliation-required");
 
@@ -108,8 +97,10 @@ test("복원 후 명시적 제어는 binding의 일치를 확인한 실행만 �
   await paused;
 
   expect(player.calls.map((c) => c.type)).toEqual(["play", "pause"]);
-  expect(player.calls[1]!.context.attemptId).toBe("existing-attempt");
-  expect(player.calls[1]!.context.executorSessionId).toBe("existing-executor");
+  expect(player.calls[1]!.context.attemptId).toBe(original.attemptId);
+  expect(player.calls[1]!.context.executorSessionId).toBe(
+    original.executorSessionId,
+  );
   expect(await f.repo.loadHistory()).toEqual([]);
 });
 

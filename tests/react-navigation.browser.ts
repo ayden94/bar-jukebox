@@ -49,7 +49,7 @@ async function move(path: string, action: string) {
   const result = await browser.evaluate(`new Promise((resolve, reject) => {
     const done = () => location.pathname === ${JSON.stringify(path)}
       && document.documentElement.dataset.page === ${JSON.stringify(
-        path.endsWith("/qr") ? "admin-qr" : "admin-songs",
+        `admin-${path.split("/").at(-1)}`,
       )};
     const observer = new MutationObserver(() => {
       if (done()) {
@@ -75,11 +75,11 @@ async function move(path: string, action: string) {
 }
 
 for (let i = 0; i < 20; i++) {
-  const path = i % 2 === 0 ? "/admin/qr" : "/admin/songs";
+  const path = ["/admin/qr", "/admin/music", "/admin/songs"][i % 3]!;
   await move(path, `document.querySelector('a[href="${path}"]').click()`);
 }
 await move("/admin/qr", "history.back()");
-await move("/admin/songs", "history.forward()");
+await move("/admin/music", "history.forward()");
 
 await browser.cdp("Network.enable");
 await armCondition(

@@ -12,7 +12,8 @@ export type Song = TrackMetadata & {
 
 export type NowPlaying = {
   song: Song;
-  startedAt: number;
+  startedAt: number | null;
+  reservedAt?: number;
   status:
     | "starting"
     | "playing"

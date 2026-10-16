@@ -21,7 +21,7 @@ export async function createIsolatedServer(
         process.execPath,
         "--preload",
         resolve("tests/support/itunes-preload.ts"),
-        resolve("dist/server/main.js"),
+        resolve("tests/support/test-server-entry.ts"),
       ],
       env: {
         ...process.env,

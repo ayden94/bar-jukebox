@@ -16,7 +16,7 @@ import { AuthGate } from "./auth-gate";
 import { NavigationFeedback } from "./navigation-feedback";
 import { admin } from "./styles";
 
-export type AdminTabId = "songs" | "qr";
+export type AdminTabId = "songs" | "qr" | "music";
 
 type AdminSessionValue = {
   readonly act: (
@@ -41,6 +41,7 @@ export function useAdminSession(): AdminSessionValue {
 const TABS: ReadonlyArray<{ href: string; id: AdminTabId; label: string }> = [
   { href: "/admin/songs", id: "songs", label: "노래 관리" },
   { href: "/admin/qr", id: "qr", label: "테이블 · QR" },
+  { href: "/admin/music", id: "music", label: "음악 연결" },
 ];
 
 export function AdminSession({
@@ -210,7 +211,7 @@ export function AdminSession({
             <span aria-hidden="true">♪</span> 주크박스 <small>관리자</small>
           </div>
           <nav
-            className="flex gap-1 max-[640.001px]:order-3 max-[640.001px]:grid max-[640.001px]:w-full max-[640.001px]:grid-cols-2"
+            className="flex gap-1 max-[640.001px]:order-3 max-[640.001px]:grid max-[640.001px]:w-full max-[640.001px]:grid-cols-3"
             aria-label="관리자 메뉴"
           >
             {TABS.map((tab) => (
