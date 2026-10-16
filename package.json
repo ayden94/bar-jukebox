@@ -5,6 +5,7 @@
     "dev": "fluo dev",
     "dev:client": "vite build --watch --config vite.client.config.ts",
     "build": "vite build --config vite.client.config.ts && vite build --config vite.server.config.ts",
+    "ci": "bun run typecheck && bun run check && bun test && bun run build && bun test-flow.ts && bun tests/react-navigation.browser.ts && bun tests/navigation-protection.browser.ts",
     "start": "bun dist/server/main.js",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",

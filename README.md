@@ -115,6 +115,7 @@ src/
 ## ✅ 검증
 
 ```bash
+bun run ci             # CI와 동일한 전체 검사·빌드·API·브라우저 회귀
 bun test               # 단위 테스트 (큐 규칙 · 저장소 round-trip · 재생)
 bun run typecheck      # TypeScript strict
 bun run check          # Biome lint + format
@@ -127,6 +128,22 @@ bun run dev:client     # 별도 터미널에서 클라이언트/CSS 빌드 감�
 실제 Music.app은 실행하지 않아요. 별도 수동 검증 서버가 필요하면
 `DATABASE_URL=:memory: PLAYBACK_DISABLED=1`로 실행할 수 있어요.
 운영에서는 `PLAYBACK_DISABLED`를 설정하지 마세요.
+
+### PR 병합 전 필수 CI
+
+`.github/workflows/ci.yml`은 main 대상 PR과 main push에서 `verify` 검사를 실행해요.
+`.bun-version`의 Bun 1.4.2와 `bun install --frozen-lockfile`로 설치한 뒤
+타입 검사, Biome 검사, 전체 단위 테스트, 클라이언트·서버 빌드, 격리 API 흐름,
+관리자 이동 및 이동 보호 브라우저 회귀를 순서대로 실행해요. 하나라도 실패하면 검사도 실패해요.
+
+로컬에서는 Chrome을 설치한 뒤 `bun run ci`를 실행하면 같은 검사를 수행해요.
+CI는 Chrome이 제공되는 Ubuntu 24.04 runner를 사용하고, 운영 음악 계정이나
+실제 Music.app 없이 임시 DB·임시 토큰·격리 fixture로 검증해요.
+
+main의 필수 status check는 GitHub Actions가 발행하는 `verify`예요.
+최신 main 기준 검사가 성공해야 PR을 병합할 수 있도록 보호하며 관리자에게도 적용해요.
+검사 이름을 변경할 때는 보호 규칙도 함께 바꿔야 해요.
+workflow 파일 작성과 실제 GitHub 실행은 별개이므로 최초 PR에서 runner 결과도 확인해요.
 
 ### React 구성과 이동 검증
 
