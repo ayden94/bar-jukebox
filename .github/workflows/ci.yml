@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # main 보호 규칙의 필수 검사 이름과 함께 유지해요.
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bun 설치
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Chrome 확인
+        run: google-chrome --version
+
+      - name: 잠금 파일 기준 의존성 설치
+        run: bun install --frozen-lockfile
+
+      - name: 전체 검사와 빌드
+        run: bun run ci
