@@ -18,7 +18,7 @@ Two React sub-apps (guest, admin) served through fluo ReactNavigationPage SSR + 
 ## CONVENTIONS (different from parent)
 - Client never imports server code: view types are re-declared in pages/types.ts (SongView vs Song).
 - All mutations POST then refresh() the snapshot; components render purely from `snap`.
-- Artwork always through the art() helper in shared.ts (/api/artwork?u=…), never raw mzstatic URLs.
+- Artwork always through the art() helper in shared.ts (/api/artwork?providerId=…&artworkId=…), never provider CDN URLs.
 - Admin requests carry the x-admin-token header (token cached in localStorage bj_admin); guest requests rely on the bj_did cookie only.
 - 공개 곡의 isMine으로 본인 신청을 구분한다. deviceId나 쿠키 서명은 응답에서 읽지 않는다.
 - API 오류는 shared.ts의 apiErrorMessage로 구조화된 error.message를 추출한다. 검색은 이전 요청을 취소하고 최신 응답만 반영한다.

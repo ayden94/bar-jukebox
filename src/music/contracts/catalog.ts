@@ -14,6 +14,18 @@ export interface ArtworkRef {
   readonly artworkId: string;
 }
 
+export interface ArtworkPort {
+  fetch(
+    ref: ArtworkRef,
+    signal: AbortSignal,
+  ): Promise<
+    MusicResult<{
+      readonly body: ArrayBuffer;
+      readonly contentType: string;
+    }>
+  >;
+}
+
 export interface TrackMetadata {
   readonly ref: TrackRef;
   readonly title: string;

@@ -1,6 +1,7 @@
 import { Inject } from "@fluojs/core";
 import {
   BadRequestException,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -25,6 +26,7 @@ import { publicSong } from "../shared/state-view";
 import { TableIdDto, TableLabelDto } from "../table/dto";
 import { TableService } from "../table/table.service";
 import { AdminTokenGuard } from "./admin-token.guard";
+import { ConfirmStoppedDto } from "./dto";
 
 @Inject(
   TableService,
@@ -56,6 +58,21 @@ export class AdminController {
     return { ok: true };
   }
 
+  @Post("/confirm-stopped")
+  @RequestDto(ConfirmStoppedDto)
+  async confirmStopped(dto: ConfirmStoppedDto) {
+    if (!dto.stoppedConfirmed || !dto.expectedSongId) {
+      throw new BadRequestException("실제 오디오 정지를 먼저 확인해주세요");
+    }
+    const confirmed = await this.playback.confirmStopped(dto.expectedSongId);
+    if (!confirmed) {
+      throw new ConflictException(
+        "현재 곡이 바뀌었어요. 상태를 다시 확인해주세요",
+      );
+    }
+    return { ok: true };
+  }
+
   @Post("/resume")
   async resume() {
     await this.playback.resume();
@@ -80,14 +97,18 @@ export class AdminController {
   @RequestDto(SongInputDto)
   async add(dto: SongInputDto) {
     const song = makeSong(
-      await lookupSong(this.search, dto.trackId),
+      await lookupSong(this.search, dto),
       "바텐더",
       null,
       true,
       null,
     );
-    await this.queue.enqueue(song);
-    console.log(`+ staff add: ${song.trackName} — ${song.artistName}`);
+    if (await this.queue.enqueue(song)) {
+      throw new ConflictException(
+        "저장된 곡의 음악 서비스 설정을 확인해주세요",
+      );
+    }
+    console.log(`+ staff add: ${song.title} — ${song.artist}`);
     return { ok: true, song: publicSong(song, "") };
   }
 

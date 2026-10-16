@@ -1,3 +1,4 @@
+import type { TrackRef } from "../../music/contracts";
 import { emit } from "../shared/bus";
 import type { NowPlaying, Song } from "../shared/types";
 import type { QueueRepository } from "./queue.repository";
@@ -13,6 +14,7 @@ export type QueueSnapshot = {
 export type EnqueueLimits = { maxPerDevice: number; maxPerTable: number };
 
 export type EnqueueDeniedReason =
+  | "provider-conflict"
   | "device-limit"
   | "table-limit"
   | "duplicate-track";
@@ -24,7 +26,19 @@ export class QueueService {
   private lastProgressSec = -1;
   private mutationChain: Promise<void> = Promise.resolve();
 
-  constructor(private readonly repository: QueueRepository) {}
+  constructor(
+    private readonly repository: QueueRepository,
+    private readonly providerId?: string,
+  ) {}
+
+  hasProviderConflict(): boolean {
+    if (!this.providerId) return false;
+    return (
+      (this.nowPlaying !== null &&
+        this.nowPlaying.song.ref.providerId !== this.providerId) ||
+      this.queue.some((song) => song.ref.providerId !== this.providerId)
+    );
+  }
 
   // 부팅 복원 전용 — 저장을 일으키지 않는다.
   hydrate(snapshot: QueueSnapshot): void {
@@ -46,9 +60,12 @@ export class QueueService {
     return this.queue.some((song) => song.deviceId === deviceId);
   }
 
-  trackIsActive(trackId: number): boolean {
-    if (this.nowPlaying?.song.trackId === trackId) return true;
-    return this.queue.some((song) => song.trackId === trackId);
+  trackIsActive(ref: TrackRef): boolean {
+    const matches = (song: Song) =>
+      song.ref.providerId === ref.providerId &&
+      song.ref.trackId === ref.trackId;
+    if (this.nowPlaying && matches(this.nowPlaying.song)) return true;
+    return this.queue.some(matches);
   }
 
   // 신청 규칙 판정: 대기+재생중을 "활성"으로 보고 중복/기기 상한/테이블 상한을 검사한다.
@@ -56,6 +73,11 @@ export class QueueService {
     song: Song,
     limits: EnqueueLimits,
   ): EnqueueDeniedReason | null {
+    if (
+      this.hasProviderConflict() ||
+      (this.providerId !== undefined && song.ref.providerId !== this.providerId)
+    )
+      return "provider-conflict";
     if (song.isStaff) return null;
     if (
       song.deviceId &&
@@ -72,7 +94,7 @@ export class QueueService {
     ) {
       return "table-limit";
     }
-    if (this.trackIsActive(song.trackId)) return "duplicate-track";
+    if (this.trackIsActive(song.ref)) return "duplicate-track";
     return null;
   }
 
@@ -102,6 +124,7 @@ export class QueueService {
 
   takeAndStart(): Promise<Song | null> {
     return this.mutate(async () => {
+      if (this.hasProviderConflict()) return null;
       if (this.nowPlaying) return null;
       const song = this.queue[0];
       if (!song) return null;
@@ -111,7 +134,7 @@ export class QueueService {
       this.nowPlaying = {
         song,
         startedAt,
-        status: "playing",
+        status: "starting",
         positionSec: 0,
         durationSec: null,
       };
@@ -138,7 +161,11 @@ export class QueueService {
     return this.mutate(async () => {
       const current = this.nowPlaying;
       if (!current || current.song.id !== expectedSongId) return null;
-      const previous = restart ? undefined : this.history[0];
+      const candidate = restart ? undefined : this.history[0];
+      const previous =
+        candidate?.ref.providerId === current.song.ref.providerId
+          ? candidate
+          : undefined;
       const startedAt = Date.now();
       if (previous) {
         await this.repository.returnToPrevious(

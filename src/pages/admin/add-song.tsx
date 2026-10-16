@@ -1,67 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useInfiniteScroll } from "../hooks";
-import { apiErrorMessage, art, SEARCH_PAGE } from "../shared";
-import type { SearchHit } from "../types";
+import { SearchMoreButton } from "../search-more-button";
+import { art, trackKey } from "../shared";
+import type { TrackMetadata } from "../types";
+import { useTrackSearch } from "../use-track-search";
 import { admin } from "./styles";
 
 type AddSongProps = {
-  onAdd: (hit: SearchHit) => Promise<void>;
+  onAdd: (hit: TrackMetadata) => Promise<void>;
 };
 
 export function AddSong({ onAdd }: AddSongProps) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<SearchHit[]>([]);
-  const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [adding, setAdding] = useState<number | null>(null);
-  const searchAbort = useRef<AbortController | null>(null);
-  const searchVersion = useRef(0);
-  useEffect(
-    () => () => {
-      ++searchVersion.current;
-      searchAbort.current?.abort();
-    },
-    [],
+  const {
+    results,
+    searching,
+    searchedTerm,
+    loadingMore,
+    pageError,
+    hasMore,
+    clear,
+    search,
+    loadMore,
+  } = useTrackSearch((message) => window.alert(message));
+  const [adding, setAdding] = useState<string | null>(null);
+  const addPending = useRef(false);
+  const moreRef = useInfiniteScroll(
+    hasMore && !loadingMore && !pageError,
+    loadMore,
   );
-  const moreRef = useInfiniteScroll(visibleCount < results.length, () =>
-    setVisibleCount((c) => c + SEARCH_PAGE),
-  );
-
-  const search = async () => {
-    searchAbort.current?.abort();
-    const version = ++searchVersion.current;
-    const term = q.trim();
-    setResults([]);
-    if (!term) return;
-    setSearching(true);
-    setSearched(false);
-    const controller = new AbortController();
-    searchAbort.current = controller;
-    try {
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(term)}`,
-        { signal: controller.signal },
-      );
-      const result = await response.json();
-      if (version !== searchVersion.current) return;
-      if (!response.ok || result.error) {
-        window.alert(
-          apiErrorMessage(result, `검색 실패 (HTTP ${response.status})`),
-        );
-        return;
-      }
-      setResults(result.hits ?? []);
-      setSearched(true);
-      setVisibleCount(SEARCH_PAGE);
-    } catch {
-      if (version === searchVersion.current) {
-        window.alert("검색 중 오류가 발생했어요");
-      }
-    } finally {
-      if (version === searchVersion.current) setSearching(false);
-    }
-  };
 
   return (
     <section className={admin.panel} aria-labelledby="add-heading">
@@ -76,7 +43,7 @@ export function AddSong({ onAdd }: AddSongProps) {
         className={admin.field}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!searching) void search();
+          if (!searching) void search(q);
         }}
       >
         <input
@@ -88,11 +55,7 @@ export function AddSong({ onAdd }: AddSongProps) {
           value={q}
           onChange={(e) => {
             setQ(e.currentTarget.value);
-            setResults([]);
-            setSearching(false);
-            setSearched(false);
-            ++searchVersion.current;
-            searchAbort.current?.abort();
+            clear();
           }}
         />
         <button
@@ -106,29 +69,29 @@ export function AddSong({ onAdd }: AddSongProps) {
       <p className={`${admin.note} !my-3`} role="status">
         {searching
           ? "곡을 찾고 있어요"
-          : searched
+          : searchedTerm
             ? results.length
               ? `검색 결과 ${results.length}곡`
               : "검색 결과가 없어요. 다른 검색어를 입력해보세요."
             : "검색 후 대기열에 추가할 수 있어요."}
       </p>
       <ul className="m-0 max-h-90 list-none overflow-y-auto p-0 [overscroll-behavior:contain]">
-        {results.slice(0, visibleCount).map((h) => (
+        {results.map((h) => (
           <li
             className="flex items-center gap-2.5 border-t border-[var(--admin-panel-border)] py-3"
-            key={h.trackId}
+            key={trackKey(h.ref)}
           >
             <img
               className="size-9 shrink-0 rounded-md object-cover"
-              src={art(h.artworkUrl)}
+              src={art(h.artwork)}
               alt=""
             />
             <div className="min-w-0 flex-1">
               <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
-                {h.trackName}
+                {h.title}
               </div>
               <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
-                {h.artistName}
+                {h.artist}
               </div>
             </div>
             <button
@@ -136,25 +99,33 @@ export function AddSong({ onAdd }: AddSongProps) {
               type="button"
               disabled={adding !== null}
               onClick={async () => {
-                setAdding(h.trackId);
+                if (addPending.current) return;
+                addPending.current = true;
+                setAdding(trackKey(h.ref));
                 try {
                   await onAdd(h);
                 } finally {
+                  addPending.current = false;
                   setAdding(null);
                 }
               }}
             >
-              {adding === h.trackId ? "추가 중" : "추가"}
+              {adding === trackKey(h.ref) ? "추가 중" : "추가"}
             </button>
           </li>
         ))}
-        {results.length > visibleCount ? (
+        {hasMore ? (
           <li
             className="flex justify-center border-b-0 py-3 text-[0.8rem] text-[var(--admin-muted)]"
             key="more"
             ref={moreRef}
           >
-            ∨ 더 보기
+            <SearchMoreButton
+              className={`${admin.button} ${admin.ghost} admin-button`}
+              loading={loadingMore}
+              failed={pageError}
+              onLoad={() => void loadMore()}
+            />
           </li>
         ) : null}
       </ul>

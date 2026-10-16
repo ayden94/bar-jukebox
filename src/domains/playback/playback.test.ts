@@ -1,370 +1,297 @@
-import { afterEach, expect, test } from "bun:test";
-import { type Client, createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import { SCHEMA_DDL } from "../../infra/schema";
-import { DrizzleQueueRepository } from "../queue/queue.repository";
-import { QueueService } from "../queue/queue.service";
-import type { Song } from "../shared/types";
-import {
-  advanceThroughAlbum,
-  type TrackNavigator,
-  type VolumeController,
-  withMutedVolume,
-} from "./music.driver";
-import { type PlaybackDriver, PlaybackService } from "./playback.service";
+import { expect, test } from "bun:test";
+import { connection, FakePlayer, fixture, song, state } from "./test-support";
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
+test("재생은 예약 저장 뒤 실행하고 접수만으로 playing을 만들지 않아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  const player = new FakePlayer();
+  player.autoObserve = false;
+  const accepted = Promise.withResolvers<void>();
+  player.beforeExecute = async () => {
+    expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
+    expect(await f.repo.loadQueue()).toEqual([]);
+  };
+  const execute = player.execute.bind(player);
+  player.execute = async (...args) => {
+    const result = await execute(...args);
+    accepted.resolve();
+    return result;
+  };
+  f.start(player);
+  await accepted.promise;
+  expect(f.queue.snapshot().nowPlaying?.status).toBe("starting");
+
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  player.deliver(player.current);
+  await playing;
+
+  expect(await f.repo.loadHistory()).toEqual([]);
+});
+
+test("빈 큐는 버스 알림으로 깨어나며 관측한 종료와 정지 뒤 다음 곡을 시작해요", async () => {
+  await using f = await fixture();
+  const player = new FakePlayer();
+  f.start(player);
+  const first = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  await f.queue.enqueue(song("a"));
+  await first;
+  await f.queue.enqueue(song("b"));
+  const next = state(
+    f.queue,
+    (s) => s.nowPlaying?.song.id === "b" && s.nowPlaying.status === "playing",
+  );
+
+  player.end();
+  await next;
+
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "stop", "play"]);
+  expect((await f.repo.loadHistory()).map((s) => s.id)).toEqual(["a"]);
+  expect((await f.repo.loadNowPlaying())?.song.id).toBe("b");
+});
+
+test("복원된 현재 곡은 재생하거나 무관한 관측으로 완료하지 않아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.queue.takeAndStart();
+  const player = new FakePlayer();
+  const { playback } = f.start(player);
+
+  await expect(playback.skip()).rejects.toThrow("현재 재생을 확인");
+
+  expect(player.calls).toEqual([]);
+  expect(f.queue.snapshot().nowPlaying?.status).toBe("reconciliation-required");
+  expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
+  expect(await f.repo.loadHistory()).toEqual([]);
+});
+
+test("복원된 다른 공급자 곡은 보존하고 외부 명령을 보내지 않아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue({
+    ...song("a"),
+    ref: { providerId: "another-provider", trackId: "opaque:A" },
   });
-  return { promise, resolve };
-}
+  await f.queue.takeAndStart();
+  const player = new FakePlayer();
+  const { playback } = f.start(player);
 
-const clients: Client[] = [];
-afterEach(() => {
-  for (const client of clients.splice(0)) client.close();
+  await expect(playback.resume()).rejects.toThrow();
+
+  expect(player.calls).toEqual([]);
+  expect(f.queue.snapshot().nowPlaying?.status).toBe("reconciliation-required");
 });
 
-async function fixture() {
-  const client = createClient({ url: ":memory:" });
-  clients.push(client);
-  await client.executeMultiple(SCHEMA_DDL);
-  const repo = new DrizzleQueueRepository(drizzle(client));
-  const queue = new QueueService(repo);
-  return { client, repo, queue };
-}
-
-function song(id: string): Song {
-  return {
-    id,
-    trackId: 1,
-    trackName: "테스트 곡",
-    artistName: "테스트 가수",
-    artworkUrl: "",
-    albumUrl: "music://test",
-    trackNumber: 1,
-    durationSec: 200,
-    requestedBy: "바텐더",
-    deviceId: null,
-    tableId: null,
-    isStaff: true,
-    requestedAt: 123,
-  };
-}
-
-function driver(overrides: Partial<PlaybackDriver> = {}): PlaybackDriver {
-  return {
-    play: async () => undefined,
-    stop: async () => undefined,
-    pause: async () => undefined,
-    resume: async () => undefined,
-    restart: async () => undefined,
-    now: () => 0,
-    currentTrackId: async () => 1,
-    playerState: async () => "playing",
-    position: async () => 0,
-    duration: async () => 200,
-    sleep: async () => {
-      throw new Error("테스트는 시간 대기에 의존하지 않아요");
-    },
-    ...overrides,
-  };
-}
-
-test("각 트랙 전환이 끝난 뒤에 다음 곡으로 넘겨요", async () => {
-  let currentTrack = 1;
-  let transitionPending = false;
-  const navigator: TrackNavigator = {
-    currentTrackId: async () => {
-      if (transitionPending) {
-        transitionPending = false;
-        currentTrack += 1;
-      }
-      return currentTrack;
-    },
-    nextTrack: async () => {
-      if (transitionPending) {
-        throw new Error("이전 전환이 끝나지 않았어요");
-      }
-      transitionPending = true;
-    },
-  };
-  await advanceThroughAlbum(navigator, 3);
-  expect(currentTrack).toBe(4);
-});
-
-test("재생 작업이 실패해도 원래 음량을 복원해요", async () => {
-  const volumes: number[] = [];
-  const controller: VolumeController = {
-    getVolume: async () => 73,
-    setVolume: async (volume) => {
-      volumes.push(volume);
-    },
-  };
-  await expect(
-    withMutedVolume(controller, async () => {
-      throw new Error("전환 실패");
-    }),
-  ).rejects.toThrow("전환 실패");
-  expect(volumes).toEqual([0, 73]);
-});
-
-test("큐에서 재생 중으로 저장한 뒤 재생하고 완료도 저장해요", async () => {
-  const { repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  const abort = new AbortController();
-  const played: string[] = [];
-  let stateReads = 0;
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        expect((await repo.loadNowPlaying())?.song.id).toBe(entry.id);
-        expect(await repo.loadQueue()).toEqual([]);
-        played.push(entry.id);
+test("복원 후 명시적 제어는 binding의 일치를 확인한 실행만 이어 받아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.queue.takeAndStart();
+  const player = new FakePlayer();
+  await player.execute(
+    {
+      type: "play",
+      trackRef: song("a").ref,
+      initialState: "playing",
+      context: {
+        target: connection.target,
+        connectionGeneration: connection.connectionGeneration,
+        commandId: "existing-command",
+        attemptId: "existing-attempt",
+        executorSessionId: "existing-executor",
       },
-      playerState: async () => {
-        if (++stateReads === 1) return "playing";
-        abort.abort();
-        return "stopped";
-      },
-    }),
+    },
+    new AbortController().signal,
   );
-  await playback.start(abort.signal);
-  expect(played).toEqual(["a"]);
-  expect(queue.nowPlayingSong()).toBeNull();
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["a"]);
-  expect(await repo.loadNowPlaying()).toBeNull();
+  const { playback } = f.start(player);
+  expect(f.queue.snapshot().nowPlaying?.status).toBe("reconciliation-required");
+
+  const paused = state(f.queue, (s) => s.nowPlaying?.status === "paused");
+  await playback.pause();
+  await paused;
+
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "pause"]);
+  expect(player.calls[1]!.context.attemptId).toBe("existing-attempt");
+  expect(player.calls[1]!.context.executorSessionId).toBe("existing-executor");
+  expect(await f.repo.loadHistory()).toEqual([]);
 });
 
-test("복원된 재생 중 곡은 다시 시작하지 않아요", async () => {
-  const { repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await queue.takeAndStart();
-  const abort = new AbortController();
-  const played: string[] = [];
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        played.push(entry.id);
-      },
-      playerState: async () => {
-        abort.abort();
-        return "stopped";
-      },
-    }),
-  );
-  await playback.start(abort.signal);
-  expect(played).toEqual([]);
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["a"]);
-});
-
-test("시작 저장이 실패하면 플레이어에 재생 명령을 보내지 않아요", async () => {
-  const { client, repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await client.execute(
+test("시작 저장 실패는 외부 재생 없이 시작 수명에 오류를 전달해요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.client.execute(
     "CREATE TRIGGER fail_start BEFORE INSERT ON now_playing BEGIN SELECT RAISE(ABORT, '시작 실패'); END",
   );
-  const played: string[] = [];
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        played.push(entry.id);
-      },
-    }),
-  );
-  await expect(playback.start()).rejects.toThrow();
-  expect(played).toEqual([]);
-  expect(queue.snapshot().queue.map((entry) => entry.id)).toEqual(["a"]);
-  expect((await repo.loadQueue()).map((entry) => entry.id)).toEqual(["a"]);
+  const player = new FakePlayer();
+
+  const { running } = f.start(player);
+  await expect(running).rejects.toThrow();
+
+  expect(player.calls).toEqual([]);
+  expect(f.queue.snapshot().queue.map((s) => s.id)).toEqual(["a"]);
+  expect((await f.repo.loadQueue()).map((s) => s.id)).toEqual(["a"]);
 });
 
-test("완료 저장 실패를 숨기거나 다음 곡을 시작하지 않아요", async () => {
-  const { client, repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await queue.enqueue(song("b"));
-  await client.execute(
+test("완료 저장 실패는 현재 곡을 보존하고 다음 재생을 차단해요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.queue.enqueue(song("b"));
+  await f.client.execute(
     "CREATE TRIGGER fail_finish BEFORE DELETE ON now_playing BEGIN SELECT RAISE(ABORT, '완료 실패'); END",
   );
-  const played: string[] = [];
-  let stateReads = 0;
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        played.push(entry.id);
-      },
-      playerState: async () => (++stateReads === 1 ? "playing" : "stopped"),
-    }),
-  );
-  await expect(playback.start()).rejects.toThrow();
-  expect(played).toEqual(["a"]);
-  expect(queue.nowPlayingSong()?.id).toBe("a");
-  expect((await repo.loadNowPlaying())?.song.id).toBe("a");
-  expect(await repo.loadHistory()).toEqual([]);
+  const player = new FakePlayer();
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { running } = f.start(player);
+  await playing;
+
+  player.end();
+  await expect(running).rejects.toThrow();
+
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "stop"]);
+  expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
+  expect(await f.repo.loadHistory()).toEqual([]);
+  expect((await f.repo.loadQueue()).map((s) => s.id)).toEqual(["b"]);
 });
 
-test("동시 건너뛰기는 한 번만 멈추고 늦은 완료도 히스토리를 중복 기록하지 않아요", async () => {
-  const { repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await queue.enqueue(song("b"));
-  const waiting = deferred<void>();
-  const ended = deferred<"stopped">();
-  const abort = new AbortController();
-  let stateReads = 0;
-  let stops = 0;
-  const played: string[] = [];
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        played.push(entry.id);
-      },
-      stop: async () => {
-        stops += 1;
-      },
-      playerState: async () => {
-        stateReads += 1;
-        if (stateReads === 2) {
-          waiting.resolve();
-          return ended.promise;
-        }
-        if (stateReads === 4) {
-          abort.abort();
-          return "stopped";
-        }
-        return "playing";
-      },
-    }),
-  );
-  const running = playback.start(abort.signal);
-  await waiting.promise;
+test("동시 건너뛰기는 한 번만 정지하고 완료해요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  const player = new FakePlayer();
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+
   await Promise.all([playback.skip(), playback.skip()]);
-  expect(queue.nowPlayingSong()).toBeNull();
-  ended.resolve("stopped");
-  await running;
-  expect(stops).toBe(1);
-  expect(played).toEqual(["a", "b"]);
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual([
-    "b",
-    "a",
-  ]);
+
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "stop"]);
+  expect(f.queue.nowPlayingSong()).toBeNull();
+  expect((await f.repo.loadHistory()).map((s) => s.id)).toEqual(["a"]);
 });
 
-test("완료 저장 중 들어온 늦은 건너뛰기는 다음 곡을 멈추지 않아요", async () => {
-  const { repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await queue.enqueue(song("b"));
-  const finishing = deferred<void>();
-  const release = deferred<void>();
-  const finish = repo.finishNowPlaying.bind(repo);
-  repo.finishNowPlaying = async (entry, result, max) => {
-    if (entry.id === "a") {
-      finishing.resolve();
-      await release.promise;
-    }
-    await finish(entry, result, max);
+test("완료 저장 중 들어온 건너뛰기는 다음 곡을 멈추지 않아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.queue.enqueue(song("b"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const finish = f.repo.finishNowPlaying.bind(f.repo);
+  f.repo.finishNowPlaying = async (...args) => {
+    entered.resolve();
+    await release.promise;
+    await finish(...args);
   };
-  const abort = new AbortController();
-  let stateReads = 0;
-  let stops = 0;
-  const played: string[] = [];
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async (entry) => {
-        played.push(entry.id);
-      },
-      stop: async () => {
-        stops += 1;
-      },
-      playerState: async () => {
-        stateReads += 1;
-        if (stateReads === 4) abort.abort();
-        return stateReads % 2 === 1 ? "playing" : "stopped";
-      },
-    }),
-  );
-  const running = playback.start(abort.signal);
-  await finishing.promise;
+  const player = new FakePlayer();
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+  player.end();
+  await entered.promise;
+  const next = state(f.queue, (s) => s.nowPlaying?.song.id === "b");
+
   const skipping = playback.skip();
   release.resolve();
   await skipping;
-  await running;
-  expect(stops).toBe(0);
-  expect(played).toEqual(["a", "b"]);
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual([
-    "b",
-    "a",
-  ]);
+  await next;
+
+  expect(player.calls.filter((c) => c.type === "stop")).toHaveLength(1);
+  expect((await f.repo.loadHistory()).map((s) => s.id)).toEqual(["a"]);
 });
 
-test("재생 준비 중 건너뛰기는 재생 명령 뒤에 실행해요", async () => {
-  const { queue } = await fixture();
-  await queue.enqueue(song("a"));
-  const playing = deferred<void>();
-  const release = deferred<void>();
-  const skipped = deferred<void>();
-  const abort = new AbortController();
-  const calls: string[] = [];
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      play: async () => {
-        calls.push("시작");
-        playing.resolve();
-        await release.promise;
-        calls.push("준비 완료");
-      },
-      stop: async () => {
-        calls.push("정지");
-        abort.abort();
-      },
-      playerState: async () => {
-        await skipped.promise;
-        return "stopped";
-      },
-    }),
-  );
-  const running = playback.start(abort.signal);
-  await playing.promise;
+test("재생 준비 중 건너뛰기는 재생 다음에 정지를 확인해요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  const player = new FakePlayer();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  player.beforeExecute = async (command) => {
+    if (command.type !== "play") return;
+    entered.resolve();
+    await release.promise;
+  };
+  const { playback } = f.start(player);
+  await entered.promise;
+
   const skipping = playback.skip();
-  expect(calls).toEqual(["시작"]);
   release.resolve();
   await skipping;
-  skipped.resolve();
-  await running;
-  expect(calls).toEqual(["시작", "준비 완료", "정지"]);
-  expect(queue.nowPlayingSong()).toBeNull();
+
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "stop"]);
+  expect(f.queue.nowPlayingSong()).toBeNull();
 });
 
-test("정지 실패와 건너뛰기 저장 실패를 호출자에게 전달하고 재시도해요", async () => {
-  const { client, repo, queue } = await fixture();
-  await queue.enqueue(song("a"));
-  await queue.takeAndStart();
-  let stops = 0;
-  const playback = new PlaybackService(
-    queue,
-    driver({
-      stop: async () => {
-        if (++stops === 1) throw new Error("정지 실패");
-      },
-    }),
-  );
-  await expect(playback.skip()).rejects.toThrow("정지 실패");
-  expect(queue.nowPlayingSong()?.id).toBe("a");
-  await client.execute(
-    "CREATE TRIGGER fail_skip BEFORE DELETE ON now_playing BEGIN SELECT RAISE(ABORT, '건너뛰기 저장 실패'); END",
+test("정지 실패와 완료 저장 실패 뒤 명시적 재시도는 신청을 한 번만 완료해요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  const player = new FakePlayer();
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+  player.outcome = "rejected";
+  await expect(playback.skip()).rejects.toThrow("disconnected");
+  expect(f.queue.nowPlayingSong()?.id).toBe("a");
+  player.outcome = "accepted";
+  await f.client.execute(
+    "CREATE TRIGGER fail_skip BEFORE DELETE ON now_playing BEGIN SELECT RAISE(ABORT, '실패'); END",
   );
   await expect(playback.skip()).rejects.toThrow();
-  expect(queue.nowPlayingSong()?.id).toBe("a");
-  expect((await repo.loadNowPlaying())?.song.id).toBe("a");
-  await client.execute("DROP TRIGGER fail_skip");
+  expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
+  await f.client.execute("DROP TRIGGER fail_skip");
+
   await playback.skip();
-  expect(queue.nowPlayingSong()).toBeNull();
-  expect(await repo.loadNowPlaying()).toBeNull();
-  expect((await repo.loadHistory()).map((entry) => entry.id)).toEqual(["a"]);
+
+  expect(f.queue.nowPlayingSong()).toBeNull();
+  expect(await f.repo.loadNowPlaying()).toBeNull();
+  expect((await f.repo.loadHistory()).map((s) => s.id)).toEqual(["a"]);
+});
+
+for (const outcome of ["unknown", "rejected"] as const) {
+  test(`재생 ${outcome} 결과는 현재 곡을 보존하고 자동 재전송하지 않아요`, async () => {
+    await using f = await fixture();
+    await f.queue.enqueue(song("a"));
+    const player = new FakePlayer();
+    player.outcome = outcome;
+    const retained = state(
+      f.queue,
+      (s) =>
+        s.nowPlaying?.status ===
+        (outcome === "unknown" ? "reconciliation-required" : "waiting"),
+    );
+    const { playback } = f.start(player);
+    await retained;
+
+    await f.queue.enqueue(song("b"));
+    await playback.dispose();
+
+    expect(player.calls.map((c) => c.type)).toEqual(["play"]);
+    expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
+    expect((await f.repo.loadQueue()).map((s) => s.id)).toEqual(["b"]);
+  });
+}
+
+test("비활성 재생은 구독이나 외부 명령 없이 관리자 제어를 받아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  const player = new FakePlayer();
+  const { playback, running } = f.start(player, null);
+
+  await Promise.all([
+    running,
+    playback.skip(),
+    playback.pause(),
+    playback.previous(),
+  ]);
+
+  expect(player.calls).toEqual([]);
+  expect(player.subscribers).toBe(0);
+  expect((await f.repo.loadQueue()).map((s) => s.id)).toEqual(["a"]);
+});
+
+test("비활성 재생의 활성 곡 제어는 성공으로 가장하지 않아요", async () => {
+  await using f = await fixture();
+  await f.queue.enqueue(song("a"));
+  await f.queue.takeAndStart();
+  const player = new FakePlayer();
+  const { playback } = f.start(player, null);
+
+  await expect(playback.skip()).rejects.toThrow("재생 기기가 연결되지");
+
+  expect(player.calls).toEqual([]);
+  expect((await f.repo.loadNowPlaying())?.song.id).toBe("a");
 });

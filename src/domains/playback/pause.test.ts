@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { composeState } from "../shared/state-view";
-import { PlaybackService } from "./playback.service";
-import { FakePlayer, fixture, song } from "./test-support";
+import { FakePlayer, fixture, song, state } from "./test-support";
 
 const settings = {
   read: () => ({
@@ -12,65 +11,69 @@ const settings = {
   }),
 };
 
-test("일시정지는 실제 플레이어와 공개 스냅샷에 반영해요", async () => {
-  using f = await fixture();
+test("일시정지는 접수가 아니라 실제 관측 뒤 공개 상태에 반영해요", async () => {
+  await using f = await fixture();
   await f.queue.enqueue(song("a"));
-  await f.queue.takeAndStart();
   const player = new FakePlayer();
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+  player.autoObserve = false;
 
-  await new PlaybackService(f.queue, player).pause();
+  await playback.pause();
+  expect(composeState(f.queue, settings, "").nowPlaying?.status).toBe(
+    "playing",
+  );
+  const paused = state(f.queue, (s) => s.nowPlaying?.status === "paused");
+  player.deliver(player.current);
+  await paused;
 
-  expect(player.state).toBe("paused");
   expect(composeState(f.queue, settings, "").nowPlaying?.status).toBe("paused");
   expect(await f.repo.loadHistory()).toEqual([]);
   expect(f.queue.nowPlayingSong()?.id).toBe("a");
 });
 
-test("연속 일시정지·재개는 요청 순서대로 실행하고 현재 곡을 유지해요", async () => {
-  using f = await fixture();
+test("연속 일시정지와 재개는 순서를 지키며 마지막 관측만 반영해요", async () => {
+  await using f = await fixture();
   await f.queue.enqueue(song("a"));
-  await f.queue.takeAndStart();
   const player = new FakePlayer();
-  player.positionSec = 50;
-  const playback = new PlaybackService(f.queue, player);
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+  const progressed = state(f.queue, (s) => s.nowPlaying?.positionSec === 50);
+  player.report({ positionSec: 50 });
+  await progressed;
 
   await Promise.all([playback.pause(), playback.resume()]);
+  await state(f.queue, (s) => s.nowPlaying?.status === "playing");
 
-  expect(player.calls).toEqual(["pause", "resume"]);
-  expect(player.state).toBe("playing");
-  expect(player.positionSec).toBe(50);
-  expect(composeState(f.queue, settings, "").nowPlaying?.status).toBe(
-    "playing",
-  );
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "pause", "resume"]);
+  expect(f.queue.snapshot().nowPlaying?.positionSec).toBe(50);
+  expect(await f.repo.loadHistory()).toEqual([]);
 });
 
 for (const action of ["pause", "resume"] as const) {
-  test(`${action} 명령 실패는 성공 상태로 노출하지 않아요`, async () => {
-    using f = await fixture();
+  test(`${action} 실패는 성공으로 표시하지 않고 현재 신청을 보존해요`, async () => {
+    await using f = await fixture();
     await f.queue.enqueue(song("a"));
-    await f.queue.takeAndStart();
     const player = new FakePlayer();
-    const initial = action === "pause" ? "playing" : "paused";
-    player.state = initial;
-    f.queue.updatePlaybackStatus(initial, "a");
-    player[action] = async () => {
-      throw new Error("명령 실패");
-    };
-    const before = f.queue.snapshot();
+    const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+    const { playback } = f.start(player);
+    await playing;
+    player.outcome = "rejected";
 
-    await expect(
-      new PlaybackService(f.queue, player)[action](),
-    ).rejects.toThrow();
+    await expect(playback[action]()).rejects.toThrow("disconnected");
 
-    expect(f.queue.snapshot()).toEqual(before);
-    expect(player.state).toBe(initial);
+    expect(f.queue.snapshot().nowPlaying?.status).toBe("waiting");
+    expect(f.queue.nowPlayingSong()?.id).toBe("a");
+    expect(await f.repo.loadHistory()).toEqual([]);
   });
 }
 
-test("현재 곡이 없으면 모든 제어는 Music.app을 건드리지 않아요", async () => {
-  using f = await fixture();
+test("현재 곡이 없으면 제어는 외부 명령을 보내지 않아요", async () => {
+  await using f = await fixture();
   const player = new FakePlayer();
-  const playback = new PlaybackService(f.queue, player);
+  const { playback } = f.start(player);
 
   await Promise.all([
     playback.previous(),
@@ -80,86 +83,51 @@ test("현재 곡이 없으면 모든 제어는 Music.app을 건드리지 않아�
   ]);
 
   expect(player.calls).toEqual([]);
-  expect(f.queue.snapshot()).toEqual({
-    nowPlaying: null,
-    queue: [],
-    history: [],
-  });
 });
 
-test("곡 끝에서 오래 일시정지해도 자동 완료하지 않고 같은 곡을 재개해요", async () => {
-  using f = await fixture();
+test("끝 위치의 일시정지와 길이 경과는 자연 종료의 증거가 아니에요", async () => {
+  await using f = await fixture();
   await f.queue.enqueue(song("a"));
   await f.queue.enqueue(song("b"));
-  await f.queue.takeAndStart();
   const player = new FakePlayer();
-  player.positionSec = 199.99;
-  const playback = new PlaybackService(f.queue, player);
-  await playback.pause();
-  const first = Promise.withResolvers<void>();
-  const advance = Promise.withResolvers<void>();
-  const second = Promise.withResolvers<void>();
-  const exit = Promise.withResolvers<void>();
-  const abort = new AbortController();
-  let polls = 0;
-  player.sleep = async () => {
-    if (++polls === 1) {
-      first.resolve();
-      await advance.promise;
-    } else {
-      second.resolve();
-      await exit.promise;
-    }
-  };
+  const playing = state(f.queue, (s) => s.nowPlaying?.status === "playing");
+  const { playback } = f.start(player);
+  await playing;
+  const paused = state(f.queue, (s) => s.nowPlaying?.status === "paused");
+  player.report({ positionSec: 199.99 }, "paused");
+  await paused;
 
-  const running = playback.start(abort.signal);
-  await first.promise;
-  player.clock = 10 * 60 * 60 * 1000;
-  advance.resolve();
-  await second.promise;
-  const paused = f.queue.snapshot();
+  const resumed = state(f.queue, (s) => s.nowPlaying?.status === "playing");
   await playback.resume();
-  abort.abort();
-  exit.resolve();
-  await running;
+  await resumed;
 
-  expect(paused.nowPlaying?.status).toBe("paused");
-  expect(paused.nowPlaying?.song.id).toBe("a");
-  expect(player.calls).toEqual(["pause", "resume"]);
-  expect(player.state).toBe("playing");
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "resume"]);
   expect(f.queue.nowPlayingSong()?.id).toBe("a");
   expect(await f.repo.loadHistory()).toEqual([]);
-  expect((await f.repo.loadQueue()).map((entry) => entry.id)).toEqual(["b"]);
+  expect((await f.repo.loadQueue()).map((s) => s.id)).toEqual(["b"]);
 });
 
-test("재생 준비 도중 일시정지는 준비가 끝난 다음 실행해요", async () => {
-  using f = await fixture();
+test("재생 준비 중 일시정지는 준비 명령이 끝난 뒤 실행해요", async () => {
+  await using f = await fixture();
   await f.queue.enqueue(song("a"));
   const player = new FakePlayer();
-  const preparing = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const abort = new AbortController();
-  const play = player.play.bind(player);
-  player.play = async (entry) => {
-    preparing.resolve();
+  player.beforeExecute = async (command) => {
+    if (command.type !== "play") return;
+    entered.resolve();
     await release.promise;
-    await play(entry);
   };
-  const pause = player.pause.bind(player);
-  player.pause = async () => {
-    await pause();
-    abort.abort();
-  };
-  const playback = new PlaybackService(f.queue, player);
+  const { playback } = f.start(player);
+  await entered.promise;
 
-  const running = playback.start(abort.signal);
-  await preparing.promise;
+  const paused = state(f.queue, (s) => s.nowPlaying?.status === "paused");
   const pausing = playback.pause();
+  expect(player.calls.map((c) => c.type)).toEqual(["play"]);
   release.resolve();
   await pausing;
-  await running;
+  await paused;
 
-  expect(player.calls).toEqual(["play:a", "pause"]);
-  expect(f.queue.snapshot().nowPlaying?.status).toBe("paused");
+  expect(player.calls.map((c) => c.type)).toEqual(["play", "pause"]);
   expect(await f.repo.loadHistory()).toEqual([]);
 });

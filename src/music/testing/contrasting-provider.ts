@@ -388,7 +388,7 @@ export function createContrastingProvider(
             case "stop":
               snapshot = {
                 ...snapshot,
-                state: "unknown",
+                state: "stopped",
                 trackRef: null,
                 binding: null,
                 positionSec: null,

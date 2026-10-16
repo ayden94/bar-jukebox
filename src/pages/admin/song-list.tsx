@@ -50,15 +50,15 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
           </span>
           <img
             className="size-10 rounded-[7px] bg-[var(--admin-input-bg)] object-cover"
-            src={art(s.artworkUrl)}
+            src={art(s.artwork)}
             alt=""
           />
           <div className="min-w-0">
             <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
-              {s.trackName}
+              {s.title}
             </div>
             <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
-              {s.artistName} · {s.requestedBy}
+              {s.artist} · {s.requestedBy}
             </div>
           </div>
           <div className="flex items-center gap-1 max-[640.001px]:col-[2/-1] max-[640.001px]:justify-end">
@@ -66,7 +66,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
               className={`${admin.button} ${admin.icon} ${admin.ghost} admin-button !px-2.5`}
               type="button"
               disabled={index === 0}
-              aria-label={`${s.trackName} 위로 이동`}
+              aria-label={`${s.title} 위로 이동`}
               onClick={() => {
                 const ids = queue.map((song) => song.id);
                 ids.splice(index - 1, 0, ...ids.splice(index, 1));
@@ -79,7 +79,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
               className={`${admin.button} ${admin.icon} ${admin.ghost} admin-button !px-2.5`}
               type="button"
               disabled={index === queue.length - 1}
-              aria-label={`${s.trackName} 아래로 이동`}
+              aria-label={`${s.title} 아래로 이동`}
               onClick={() => {
                 const ids = queue.map((song) => song.id);
                 ids.splice(index + 1, 0, ...ids.splice(index, 1));
@@ -91,7 +91,7 @@ export function QueueList({ queue, onReorder, onRemove }: QueueListProps) {
             <button
               className={`${admin.button} ${admin.danger} admin-button !px-2.5`}
               type="button"
-              aria-label={`${s.trackName} 대기열에서 삭제`}
+              aria-label={`${s.title} 대기열에서 삭제`}
               onClick={() => onRemove(s.id)}
             >
               삭제
@@ -110,15 +110,15 @@ export function HistoryList({ history }: { history: SongView[] }) {
         <li key={s.id}>
           <img
             className="size-10 rounded-[7px] bg-[var(--admin-input-bg)] object-cover"
-            src={art(s.artworkUrl)}
+            src={art(s.artwork)}
             alt=""
           />
           <div className="min-w-0">
             <div className="overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
-              {s.trackName}
+              {s.title}
             </div>
             <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--admin-muted)]">
-              {s.artistName}
+              {s.artist}
             </div>
           </div>
           <span className="max-w-25 text-xs text-[var(--admin-muted)] [overflow-wrap:anywhere] max-[640.001px]:col-start-2">
