@@ -38,7 +38,12 @@ function DocumentShell({
 }) {
   const route = useRouterState();
   const isAdmin = initialPage.payload.destination.module.startsWith("./admin/");
-  const active = route.pathname === "/admin/qr" ? "qr" : "songs";
+  const active =
+    route.pathname === "/admin/music"
+      ? "music"
+      : route.pathname === "/admin/qr"
+        ? "qr"
+        : "songs";
   const props = initialPage.payload.destination.props;
   const theme = bakedTheme(
     typeof props.theme === "string" ? props.theme : themePreferenceFromCookie(),
@@ -67,7 +72,7 @@ function DocumentShell({
         {!isAdmin && <meta name="apple-mobile-web-app-capable" content="yes" />}
         <title>
           {isAdmin
-            ? `주크박스 관리 · ${active === "qr" ? "QR 관리" : "노래 관리"}`
+            ? `주크박스 관리 · ${active === "music" ? "음악 연결" : active === "qr" ? "QR 관리" : "노래 관리"}`
             : "바 주크박스"}
         </title>
         <link href="/favicon.svg" rel="icon" type="image/svg+xml" />

@@ -1,6 +1,17 @@
 import { asc, eq, sql } from "drizzle-orm";
-import type { Drizzle } from "../../infra/db";
-import { history, nowPlaying, queue } from "../../infra/schema";
+import { type Drizzle, databaseOperation } from "../../infra/db";
+import {
+  history,
+  nowPlaying,
+  playbackAttempts,
+  queue,
+} from "../../infra/schema";
+import {
+  assertAttempt,
+  finishPlayback,
+  reservePlayback,
+} from "../playback/playback.repository";
+import type { PlaybackFence, PlaybackReservation } from "../playback/protocol";
 import type { Song } from "../shared/types";
 import {
   decodePersistedSong,
@@ -8,7 +19,11 @@ import {
   PersistedSongError,
 } from "./persisted-song";
 
-export type StoredNowPlaying = { song: Song; startedAt: number };
+export type StoredNowPlaying = {
+  song: Song;
+  startedAt: number | null;
+  reservedAt?: number;
+};
 type Transaction = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
 
 // 서비스가 의존하는 저장소 포트. 재생 전환은 각각 하나의 트랜잭션이에요.
@@ -19,63 +34,86 @@ export interface QueueRepository {
   insertQueueSong(song: Song): Promise<void>;
   removeQueueSong(id: string): Promise<void>;
   replaceQueuePositions(songs: Song[]): Promise<void>;
-  takeAndStart(song: Song, startedAt: number): Promise<void>;
-  restartNowPlaying(startedAt: number): Promise<void>;
+  takeAndStart(
+    song: Song,
+    startedAt: number,
+    reservation?: PlaybackReservation,
+  ): Promise<void>;
+  restartNowPlaying(
+    startedAt: number,
+    reservation?: PlaybackReservation,
+  ): Promise<void>;
   returnToPrevious(
     current: Song,
     previous: Song,
     startedAt: number,
+    reservation?: PlaybackReservation,
   ): Promise<void>;
   finishNowPlaying(
     song: Song,
     result: "done" | "failed",
     max: number,
+    fence?: PlaybackFence,
+    finishedAt?: number,
   ): Promise<void>;
 }
 
 export class DrizzleQueueRepository implements QueueRepository {
-  private writeChain: Promise<void> = Promise.resolve();
-
   constructor(private readonly db: Drizzle) {}
 
   // 실패는 호출자에게 전달하되 다음 쓰기는 계속 처리해요.
   private serialize(task: () => Promise<void>): Promise<void> {
-    const run = this.writeChain.then(task);
-    this.writeChain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    return databaseOperation(this.db, task);
   }
 
   async loadQueue(): Promise<Song[]> {
-    const rows = await this.db
-      .select()
-      .from(queue)
-      .orderBy(asc(queue.position));
-    return rows.map((row) => decodePersistedSong(row.data, "queue", row.id));
+    return databaseOperation(this.db, async () => {
+      const rows = await this.db
+        .select()
+        .from(queue)
+        .orderBy(asc(queue.position));
+      return rows.map((row) => decodePersistedSong(row.data, "queue", row.id));
+    });
   }
 
   async loadHistory(): Promise<Song[]> {
-    const rows = await this.db
-      .select()
-      .from(history)
-      .orderBy(asc(history.position));
-    return rows.map((row) => decodePersistedSong(row.data, "history", row.id));
+    return databaseOperation(this.db, async () => {
+      const rows = await this.db
+        .select()
+        .from(history)
+        .orderBy(asc(history.position));
+      return rows.map((row) =>
+        decodePersistedSong(row.data, "history", row.id),
+      );
+    });
   }
 
   async loadNowPlaying(): Promise<StoredNowPlaying | null> {
-    const rows = await this.db
-      .select()
-      .from(nowPlaying)
-      .where(eq(nowPlaying.id, 1));
-    const row = rows[0];
-    if (!row) return null;
-    const song = decodePersistedSong(row.data, "now_playing", row.id);
-    if (!isStoredTimestamp(row.startedAt)) {
-      throw new PersistedSongError("now_playing", row.id, "invalid-started-at");
-    }
-    return { song, startedAt: row.startedAt };
+    return databaseOperation(this.db, async () => {
+      const rows = await this.db
+        .select()
+        .from(nowPlaying)
+        .where(eq(nowPlaying.id, 1));
+      const row = rows[0];
+      if (!row) return null;
+      const song = decodePersistedSong(row.data, "now_playing", row.id);
+      if (!isStoredTimestamp(row.startedAt)) {
+        throw new PersistedSongError(
+          "now_playing",
+          row.id,
+          "invalid-started-at",
+        );
+      }
+      const attempt = (
+        await this.db
+          .select()
+          .from(playbackAttempts)
+          .where(eq(playbackAttempts.active, true))
+      )[0]?.data;
+      return attempt
+        ? { song, startedAt: attempt.startedAt, reservedAt: attempt.reservedAt }
+        : { song, startedAt: row.startedAt };
+    });
   }
 
   insertQueueSong(song: Song): Promise<void> {
@@ -123,9 +161,15 @@ export class DrizzleQueueRepository implements QueueRepository {
     );
   }
 
-  takeAndStart(song: Song, startedAt: number): Promise<void> {
+  takeAndStart(
+    song: Song,
+    startedAt: number,
+    reservation?: PlaybackReservation,
+  ): Promise<void> {
     return this.serialize(() =>
       this.db.transaction(async (tx) => {
+        if (reservation) await reservePlayback(tx, reservation);
+        else await this.assertLegacy(tx);
         await this.removeAndCompact(tx, song.id);
         await tx
           .insert(nowPlaying)
@@ -134,22 +178,32 @@ export class DrizzleQueueRepository implements QueueRepository {
     );
   }
 
-  restartNowPlaying(startedAt: number): Promise<void> {
-    return this.serialize(async () => {
-      await this.db
-        .update(nowPlaying)
-        .set({ startedAt })
-        .where(eq(nowPlaying.id, 1));
-    });
+  restartNowPlaying(
+    startedAt: number,
+    reservation?: PlaybackReservation,
+  ): Promise<void> {
+    return this.serialize(() =>
+      this.db.transaction(async (tx) => {
+        if (reservation) await reservePlayback(tx, reservation);
+        else await this.assertLegacy(tx);
+        await tx
+          .update(nowPlaying)
+          .set({ startedAt })
+          .where(eq(nowPlaying.id, 1));
+      }),
+    );
   }
 
   returnToPrevious(
     current: Song,
     previous: Song,
     startedAt: number,
+    reservation?: PlaybackReservation,
   ): Promise<void> {
     return this.serialize(() =>
       this.db.transaction(async (tx) => {
+        if (reservation) await reservePlayback(tx, reservation);
+        else await this.assertLegacy(tx);
         await tx.update(queue).set({
           position: sql`${queue.position} + 1`,
         });
@@ -177,9 +231,26 @@ export class DrizzleQueueRepository implements QueueRepository {
     song: Song,
     result: "done" | "failed",
     max: number,
+    fence?: PlaybackFence,
+    finishedAt = Date.now(),
   ): Promise<void> {
     return this.serialize(() =>
       this.db.transaction(async (tx) => {
+        if (fence) {
+          const attempt = await assertAttempt(tx, fence);
+          if (attempt && attempt.songId !== song.id)
+            throw new Error("오래된 신청곡이에요");
+          await finishPlayback(tx, fence, finishedAt);
+        } else await this.assertLegacy(tx);
+        const current = (
+          await tx.select().from(nowPlaying).where(eq(nowPlaying.id, 1))
+        )[0];
+        if (
+          !current ||
+          decodePersistedSong(current.data, "now_playing", 1).id !== song.id
+        ) {
+          throw new Error("오래된 신청곡이에요");
+        }
         if (result === "done") {
           const rows = await tx
             .select()
@@ -200,5 +271,14 @@ export class DrizzleQueueRepository implements QueueRepository {
         await tx.delete(nowPlaying).where(eq(nowPlaying.id, 1));
       }),
     );
+  }
+
+  private async assertLegacy(tx: Transaction): Promise<void> {
+    const active = await tx
+      .select()
+      .from(playbackAttempts)
+      .where(eq(playbackAttempts.active, true));
+    if (active.length > 0)
+      throw new Error("재생 시도와 소유권 확인이 필요해요");
   }
 }

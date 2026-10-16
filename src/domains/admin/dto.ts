@@ -1,5 +1,5 @@
 import { FromBody, FromCookie, Optional } from "@fluojs/http";
-import { IsBoolean, IsString } from "@fluojs/validation";
+import { IsBoolean, IsInt, IsString } from "@fluojs/validation";
 
 export class ConfirmStoppedDto {
   @IsString()
@@ -8,6 +8,13 @@ export class ConfirmStoppedDto {
   @IsBoolean()
   @FromBody("stoppedConfirmed")
   stoppedConfirmed = false;
+  @Optional()
+  @IsString()
+  @FromBody("expectedAttemptId")
+  expectedAttemptId: string | null = null;
+  @IsInt()
+  @FromBody("expectedOwnerEpoch")
+  expectedOwnerEpoch = 0;
 }
 
 export class AdminPageDto {

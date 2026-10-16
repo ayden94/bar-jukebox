@@ -1,4 +1,9 @@
 import type { TrackRef } from "../../music/contracts";
+import type {
+  DurableAttempt,
+  PlaybackFence,
+  PlaybackReservation,
+} from "../playback/protocol";
 import { emit } from "../shared/bus";
 import type { NowPlaying, Song } from "../shared/types";
 import type { QueueRepository } from "./queue.repository";
@@ -28,10 +33,11 @@ export class QueueService {
 
   constructor(
     private readonly repository: QueueRepository,
-    private readonly providerId?: string,
+    private readonly providerId?: string | null,
   ) {}
 
   hasProviderConflict(): boolean {
+    if (this.providerId === null) return true;
     if (!this.providerId) return false;
     return (
       (this.nowPlaying !== null &&
@@ -122,18 +128,22 @@ export class QueueService {
     });
   }
 
-  takeAndStart(): Promise<Song | null> {
+  takeAndStart(
+    reserve?: (song: Song) => PlaybackReservation,
+  ): Promise<Song | null> {
     return this.mutate(async () => {
       if (this.hasProviderConflict()) return null;
       if (this.nowPlaying) return null;
       const song = this.queue[0];
       if (!song) return null;
-      const startedAt = Date.now();
-      await this.repository.takeAndStart(song, startedAt);
+      const reservation = reserve?.(song);
+      const startedAt = reservation?.attempt.reservedAt ?? Date.now();
+      await this.repository.takeAndStart(song, startedAt, reservation);
       this.queue.shift();
       this.nowPlaying = {
         song,
-        startedAt,
+        startedAt: reservation ? null : startedAt,
+        ...(reservation ? { reservedAt: startedAt } : {}),
         status: "starting",
         positionSec: 0,
         durationSec: null,
@@ -142,6 +152,26 @@ export class QueueService {
       emit("mutate");
       return song;
     });
+  }
+
+  applyPlayback(attempt: DurableAttempt): void {
+    if (
+      !this.nowPlaying ||
+      this.nowPlaying.song.id !== attempt.songId ||
+      attempt.state === "finished" ||
+      attempt.state === "superseded"
+    )
+      return;
+    this.nowPlaying.startedAt = attempt.startedAt;
+    this.nowPlaying.reservedAt = attempt.reservedAt;
+    this.updatePlaybackStatus(attempt.state, attempt.songId);
+    if (attempt.positionSec !== null) {
+      this.updateProgress(
+        attempt.positionSec,
+        attempt.durationSec,
+        attempt.songId,
+      );
+    }
   }
 
   // 위치와 마찬가지로 실제 플레이어에서 관찰한 상태예요. 복원 시 다시 읽어요.
@@ -157,7 +187,11 @@ export class QueueService {
     emit("mutate");
   }
 
-  previous(expectedSongId: string, restart: boolean): Promise<Song | null> {
+  previous(
+    expectedSongId: string,
+    restart: boolean,
+    reserve?: (song: Song) => PlaybackReservation,
+  ): Promise<Song | null> {
     return this.mutate(async () => {
       const current = this.nowPlaying;
       if (!current || current.song.id !== expectedSongId) return null;
@@ -166,22 +200,25 @@ export class QueueService {
         candidate?.ref.providerId === current.song.ref.providerId
           ? candidate
           : undefined;
-      const startedAt = Date.now();
+      const reservation = reserve?.(previous ?? current.song);
+      const startedAt = reservation?.attempt.reservedAt ?? Date.now();
       if (previous) {
         await this.repository.returnToPrevious(
           current.song,
           previous,
           startedAt,
+          reservation,
         );
         this.queue.unshift(current.song);
         this.history.shift();
       } else {
-        await this.repository.restartNowPlaying(startedAt);
+        await this.repository.restartNowPlaying(startedAt, reservation);
       }
       this.nowPlaying = {
         song: previous ?? current.song,
-        startedAt,
-        status: current.status,
+        startedAt: reservation ? null : startedAt,
+        ...(reservation ? { reservedAt: startedAt } : {}),
+        status: reservation ? "starting" : current.status,
         positionSec: 0,
         durationSec: previous ? null : current.durationSec,
       };
@@ -215,12 +252,20 @@ export class QueueService {
   finishNowPlaying(
     result: "done" | "failed",
     expectedSongId: string,
+    fence?: PlaybackFence,
+    finishedAt?: number,
   ): Promise<boolean> {
     return this.mutate(async () => {
       const song = this.nowPlaying?.song;
       // 이전 곡의 완료/건너뛰기 요청이 다음 곡을 지우지 않아요.
       if (!song || song.id !== expectedSongId) return false;
-      await this.repository.finishNowPlaying(song, result, MAX_HISTORY);
+      await this.repository.finishNowPlaying(
+        song,
+        result,
+        MAX_HISTORY,
+        fence,
+        finishedAt,
+      );
       if (result === "done") {
         this.history.unshift(song);
         if (this.history.length > MAX_HISTORY) this.history.pop();

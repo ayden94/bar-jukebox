@@ -23,12 +23,13 @@ export class SongLookupError extends Error {
 
 export class SearchService {
   constructor(
-    private readonly catalog: CatalogPort,
-    private readonly artwork: ArtworkPort,
-    readonly providerId: string,
+    private readonly catalog: CatalogPort | null,
+    private readonly artwork: ArtworkPort | null,
+    readonly providerId: string | null,
   ) {}
 
   async search(query: string, cursor: string | null = null) {
+    if (!this.catalog) throw new SongLookupError("upstream-unavailable");
     const result = await this.catalog.search(
       query,
       cursor,
@@ -39,6 +40,7 @@ export class SearchService {
   }
 
   async lookup(ref: TrackRef): Promise<TrackMetadata> {
+    if (!this.catalog) throw new SongLookupError("upstream-unavailable");
     if (
       ref.providerId !== this.providerId ||
       !ref.trackId ||
@@ -65,7 +67,7 @@ export class SearchService {
   }
 
   async fetchArtwork(ref: ArtworkRef) {
-    if (ref.providerId !== this.providerId) return null;
+    if (!this.artwork || ref.providerId !== this.providerId) return null;
     const result = await this.artwork.fetch(ref, AbortSignal.timeout(5000));
     return result.ok ? result.value : null;
   }

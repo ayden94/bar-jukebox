@@ -18,8 +18,26 @@ export type SettingsStateView = {
 };
 
 export function publicSong(song: Song, viewerId: string): PublicSong {
-  const { deviceId, ...visible } = song;
-  return { ...visible, isMine: Boolean(viewerId) && deviceId === viewerId };
+  return {
+    formatVersion: song.formatVersion,
+    id: song.id,
+    ref: { providerId: song.ref.providerId, trackId: song.ref.trackId },
+    title: song.title,
+    artist: song.artist,
+    durationSec: song.durationSec,
+    artwork: song.artwork
+      ? {
+          providerId: song.artwork.providerId,
+          artworkId: song.artwork.artworkId,
+        }
+      : null,
+    sourceUrl: song.sourceUrl,
+    requestedBy: song.requestedBy,
+    tableId: song.tableId,
+    isStaff: song.isStaff,
+    requestedAt: song.requestedAt,
+    isMine: Boolean(viewerId) && song.deviceId === viewerId,
+  };
 }
 
 export function composeState(
@@ -32,7 +50,15 @@ export function composeState(
     ...settings.read(),
     nowPlaying: snapshot.nowPlaying
       ? {
-          ...snapshot.nowPlaying,
+          startedAt: snapshot.nowPlaying.startedAt,
+          ...(snapshot.nowPlaying.reservedAt === undefined
+            ? {}
+            : {
+                reservedAt: snapshot.nowPlaying.reservedAt,
+              }),
+          status: snapshot.nowPlaying.status,
+          positionSec: snapshot.nowPlaying.positionSec,
+          durationSec: snapshot.nowPlaying.durationSec,
           song: publicSong(snapshot.nowPlaying.song, viewerId),
         }
       : null,

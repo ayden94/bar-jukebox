@@ -25,6 +25,10 @@ import { AdminTokenGuard } from "./domains/admin/admin-token.guard";
 import { AdminPageDto } from "./domains/admin/dto";
 import { EventsController } from "./domains/events/events.controller";
 import { SseBroker } from "./domains/events/sse-broker";
+import { MusicController } from "./domains/music/music.controller";
+import { MusicService } from "./domains/music/music.service";
+import { BrowserPlaybackBridge } from "./domains/playback/browser-playback-bridge";
+import { PlaybackController } from "./domains/playback/playback.controller";
 import { PlaybackService } from "./domains/playback/playback.service";
 import { JukeboxBusToken, type JukeboxRuntime } from "./domains/providers";
 import { QueueController } from "./domains/queue/queue.controller";
@@ -40,7 +44,7 @@ import {
   DeviceCookieMiddleware,
   deviceIdOf,
 } from "./middleware/device-cookie.middleware";
-import { AdminQrPage, AdminSongsPage } from "./pages/admin";
+import { AdminMusicPage, AdminQrPage, AdminSongsPage } from "./pages/admin";
 import { AppDocument } from "./pages/app-document";
 import GuestPage from "./pages/guest/page";
 
@@ -167,6 +171,15 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
         props: { theme: dto.theme ?? "" },
       });
     }
+
+    @Path("/music")
+    @RequestDto(AdminPageDto)
+    music(dto: AdminPageDto) {
+      return ReactNavigationPage.create(<AdminMusicPage />, {
+        module: "./admin/music-page.tsx",
+        props: { theme: dto.theme ?? "" },
+      });
+    }
   }
 
   class AssetRequest {
@@ -282,6 +295,8 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       TableService,
       SearchService,
       PlaybackService,
+      BrowserPlaybackBridge,
+      MusicService,
       SseBroker,
       JukeboxBusToken,
     ],
@@ -294,6 +309,8 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       TableController,
       SearchController,
       AdminController,
+      MusicController,
+      PlaybackController,
       EventsController,
       ViteAssetController,
       PublicFileController,

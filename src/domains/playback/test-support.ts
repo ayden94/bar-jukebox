@@ -4,6 +4,7 @@ import { SCHEMA_DDL } from "../../infra/schema";
 import type {
   CommandOutcome,
   ConnectedTarget,
+  NativeBinding,
   PlaybackCommand,
   PlaybackObservation,
   PlaybackPort,
@@ -12,7 +13,11 @@ import { DrizzleQueueRepository } from "../queue/queue.repository";
 import { QueueService } from "../queue/queue.service";
 import { onChange } from "../shared/bus";
 import type { Song } from "../shared/types";
-import { PlaybackService } from "./playback.service";
+import { PlaybackRepository } from "./playback.repository";
+import {
+  PlaybackService,
+  type PlaybackServiceOptions,
+} from "./playback.service";
 
 export const connection: ConnectedTarget = {
   target: { providerId: "test-player", modeId: "local", targetId: "speaker" },
@@ -32,28 +37,41 @@ export const connection: ConnectedTarget = {
 export async function fixture() {
   const client = createClient({ url: ":memory:" });
   await client.executeMultiple(SCHEMA_DDL);
-  const repo = new DrizzleQueueRepository(drizzle(client));
+  const database = drizzle(client);
+  const repo = new DrizzleQueueRepository(database);
+  const playbackRepo = new PlaybackRepository(database);
   const queue = new QueueService(repo);
   const services: PlaybackService[] = [];
   const runs: Promise<void>[] = [];
   return {
     client,
     repo,
+    playbackRepo,
     queue,
     start(
       player: PlaybackPort,
       target: ConnectedTarget | null = connection,
       signal?: AbortSignal,
       stopConfirmationTimeoutMs?: number,
+      options?: PlaybackServiceOptions,
     ) {
       const playback = new PlaybackService(
         queue,
         player,
         target,
-        stopConfirmationTimeoutMs,
+        playbackRepo,
+        { stopConfirmationTimeoutMs, ...options },
       );
       services.push(playback);
       const running = playback.start(signal);
+      if (target && target.location !== "server") {
+        void playback
+          .claimOwner({
+            executorSessionId: "explicit-test-executor",
+            connection: target,
+          })
+          .catch(() => undefined);
+      }
       // 실패를 검증하는 테스트가 결과를 읽기 전에도 rejection을 처리해요.
       void running.catch(() => undefined);
       runs.push(running);
@@ -302,7 +320,7 @@ export class FakePlayer implements PlaybackPort {
     return iterator;
   }
 
-  async reconcile() {
+  async reconcile(_binding?: NativeBinding, _signal?: AbortSignal) {
     return {
       ok: true as const,
       value: { status: "match" as const, observation: this.current },

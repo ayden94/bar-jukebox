@@ -143,7 +143,7 @@ test("v1 이전은 요청 소유권과 순서와 시작 시각을 보존하고 �
   ).toEqual([5]);
   expect(
     (await client.execute("PRAGMA user_version")).rows[0]?.user_version,
-  ).toBe(1);
+  ).toBe(2);
   const before = await snapshot(client);
   expect(await initDatabase(connection)).toEqual({ backupPath: null });
   expect(await snapshot(client)).toEqual(before);
@@ -249,7 +249,7 @@ test("v1 이전은 중간 SQL 실패를 롤백하고 원인을 고친 뒤 재실
 
 test("초기화는 미래 DB 버전을 거부하며 행과 버전과 파일 목록을 바꾸지 않아요", async () => {
   const { connection, client, path } = await fixture(true);
-  await client.execute("PRAGMA user_version = 2");
+  await client.execute("PRAGMA user_version = 3");
   const before = await snapshot(client);
   const files = await readdir(join(path!, ".."));
 
@@ -309,7 +309,7 @@ test("새 DB 초기화는 빈 v1 스키마를 만들고 불필요한 백업을 �
   expect(
     (await connection.client.execute("PRAGMA user_version")).rows[0]
       ?.user_version,
-  ).toBe(1);
+  ).toBe(2);
 });
 
 test("DB 모듈 import는 환경 경로나 기본 경로에 파일을 만들지 않아요", async () => {
@@ -338,4 +338,87 @@ test("DB 모듈 import는 환경 경로나 기본 경로에 파일을 만들지 
 
   expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
   expect(await readdir(cwd)).toEqual([]);
+});
+
+async function versionOneFixture() {
+  const fixtureState = await fixture(true);
+  const { client } = fixtureState;
+  await client.executeMultiple(`
+    DROP TABLE playback_commands;
+    DROP TABLE playback_attempts;
+    DROP TABLE playback_owner;
+    PRAGMA user_version = 1;
+  `);
+  for (const [table, ids] of [
+    ["queue", ["a", "b"]],
+    ["history", ["h"]],
+    ["now_playing", ["playing"]],
+  ] as const) {
+    for (const id of ids) {
+      await client.execute({
+        sql: `UPDATE ${table} SET data = ? WHERE id = ?`,
+        args: [
+          JSON.stringify(migratedSong(id)),
+          table === "now_playing" ? 1 : id,
+        ],
+      });
+    }
+  }
+  return fixtureState;
+}
+
+test("v2 이전은 실제 v1 파일을 먼저 백업하고 기존 신청과 시작 시각을 보존해요", async () => {
+  const { connection, client } = await versionOneFixture();
+  const before = await snapshot(client);
+
+  const { backupPath } = await initDatabase(connection);
+
+  expect(backupPath).toContain(".before-v2-");
+  const backup = open(pathToFileURL(backupPath!).href);
+  expect(await snapshot(backup.client)).toEqual(before);
+  expect(
+    (
+      await backup.client.execute(
+        "SELECT name FROM sqlite_master WHERE name LIKE 'playback_%'",
+      )
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (await client.execute("PRAGMA user_version")).rows[0]?.user_version,
+  ).toBe(2);
+  expect(
+    (await client.execute("SELECT * FROM playback_owner")).rows.map(
+      ({ id, epoch, data }) => ({ id, epoch, data }),
+    ),
+  ).toEqual([{ id: 1, epoch: 0, data: null }]);
+  expect(
+    await new DrizzleQueueRepository(connection.database).loadNowPlaying(),
+  ).toEqual({
+    song: migratedSong("playing"),
+    startedAt: 456,
+  });
+  expect(await initDatabase(connection)).toEqual({ backupPath: null });
+});
+
+test("v2 DDL 실패는 owner 생성과 버전을 함께 롤백하고 원본과 백업을 남겨요", async () => {
+  const { connection, client, path } = await versionOneFixture();
+  await client.execute("CREATE VIEW playback_attempts AS SELECT 1 AS active");
+  const before = await snapshot(client);
+  const schema = (
+    await client.execute("SELECT name, sql FROM sqlite_master ORDER BY name")
+  ).rows;
+
+  await expect(initDatabase(connection)).rejects.toThrow();
+
+  expect(await snapshot(client)).toEqual(before);
+  expect(
+    (await client.execute("SELECT name, sql FROM sqlite_master ORDER BY name"))
+      .rows,
+  ).toEqual(schema);
+  const backups = (await readdir(join(path!, ".."))).filter((name) =>
+    name.includes(".before-v2-"),
+  );
+  expect(backups).toHaveLength(1);
+  const backup = open(pathToFileURL(join(path!, "..", backups[0]!)).href);
+  expect(await snapshot(backup.client)).toEqual(before);
 });

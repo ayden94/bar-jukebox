@@ -1,42 +1,46 @@
 import { afterEach, expect, test } from "bun:test";
+import { type Client, createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { SCHEMA_DDL } from "../../infra/schema";
 import { type BusEvent, onChange } from "../shared/bus";
 import type { Song } from "../shared/types";
-import type { QueueRepository, StoredNowPlaying } from "./queue.repository";
+import {
+  DrizzleQueueRepository,
+  type QueueRepository,
+} from "./queue.repository";
 import { QueueService } from "./queue.service";
 
+const databases: { client: Client; ready: Promise<void> }[] = [];
+
 function memoryRepository(): QueueRepository {
-  let queued: Song[] = [];
-  let played: Song[] = [];
-  let current: StoredNowPlaying | null = null;
+  const client = createClient({ url: ":memory:" });
+  const ready = client.executeMultiple(SCHEMA_DDL);
+  databases.push({ client, ready });
+  const repository = new DrizzleQueueRepository(drizzle(client));
+  const initialized =
+    <Args extends unknown[], Result>(
+      method: (...args: Args) => Promise<Result>,
+    ) =>
+    async (...args: Args): Promise<Result> => {
+      await ready;
+      return method(...args);
+    };
+  // 영속 전환 인수를 무시하는 가짜 대신 동일한 SQLite 계약을 사용해요.
   return {
-    loadQueue: async () => [...queued],
-    loadHistory: async () => [...played],
-    loadNowPlaying: async () => current,
-    insertQueueSong: async (song) => {
-      queued.push(song);
-    },
-    removeQueueSong: async (id) => {
-      queued = queued.filter((song) => song.id !== id);
-    },
-    replaceQueuePositions: async (songs) => {
-      queued = [...songs];
-    },
-    takeAndStart: async (song, startedAt) => {
-      queued = queued.filter((entry) => entry.id !== song.id);
-      current = { song, startedAt };
-    },
-    restartNowPlaying: async (startedAt) => {
-      if (current) current = { ...current, startedAt };
-    },
-    returnToPrevious: async (displaced, previous, startedAt) => {
-      queued.unshift(displaced);
-      played = played.filter((song) => song.id !== previous.id);
-      current = { song: previous, startedAt };
-    },
-    finishNowPlaying: async (song, result, max) => {
-      if (result === "done") played = [song, ...played].slice(0, max);
-      current = null;
-    },
+    loadQueue: initialized(repository.loadQueue.bind(repository)),
+    loadHistory: initialized(repository.loadHistory.bind(repository)),
+    loadNowPlaying: initialized(repository.loadNowPlaying.bind(repository)),
+    insertQueueSong: initialized(repository.insertQueueSong.bind(repository)),
+    removeQueueSong: initialized(repository.removeQueueSong.bind(repository)),
+    replaceQueuePositions: initialized(
+      repository.replaceQueuePositions.bind(repository),
+    ),
+    takeAndStart: initialized(repository.takeAndStart.bind(repository)),
+    restartNowPlaying: initialized(
+      repository.restartNowPlaying.bind(repository),
+    ),
+    returnToPrevious: initialized(repository.returnToPrevious.bind(repository)),
+    finishNowPlaying: initialized(repository.finishNowPlaying.bind(repository)),
   };
 }
 
@@ -71,8 +75,12 @@ function song(id: string, overrides: Partial<Song> = {}): Song {
 
 let events: BusEvent[] | null = null;
 onChange((event) => events?.push(event));
-afterEach(() => {
+afterEach(async () => {
   events = null;
+  for (const { client, ready } of databases.splice(0)) {
+    await ready;
+    client.close();
+  }
 });
 
 test("기기와 트랙 활성 여부는 대기 중과 재생 중을 모두 세요", async () => {
@@ -166,6 +174,25 @@ test("선택 공급자와 다른 활성 곡은 보존하고 직원 신청과 재
   );
   expect(await queue.takeAndStart()).toBeNull();
   expect(queue.snapshot()).toEqual(before);
+  expect(await repo.loadNowPlaying()).toBeNull();
+});
+
+test("공급자 미설정은 기존 신청을 보존하고 직원 신청과 예약도 거절해요", async () => {
+  const repo = memoryRepository();
+  await repo.insertQueueSong(song("existing"));
+  const queue = new QueueService(repo, null);
+  queue.hydrate({
+    queue: await repo.loadQueue(),
+    history: [],
+    nowPlaying: null,
+  });
+
+  expect(await queue.enqueue(song("staff", { isStaff: true }))).toBe(
+    "provider-conflict",
+  );
+  expect(await queue.takeAndStart()).toBeNull();
+
+  expect(await repo.loadQueue()).toEqual([song("existing")]);
   expect(await repo.loadNowPlaying()).toBeNull();
 });
 

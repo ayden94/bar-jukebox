@@ -64,7 +64,10 @@ export class AdminController {
     if (!dto.stoppedConfirmed || !dto.expectedSongId) {
       throw new BadRequestException("실제 오디오 정지를 먼저 확인해주세요");
     }
-    const confirmed = await this.playback.confirmStopped(dto.expectedSongId);
+    const confirmed = await this.playback.confirmStopped(dto.expectedSongId, {
+      attemptId: dto.expectedAttemptId,
+      ownerEpoch: dto.expectedOwnerEpoch,
+    });
     if (!confirmed) {
       throw new ConflictException(
         "현재 곡이 바뀌었어요. 상태를 다시 확인해주세요",

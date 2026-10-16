@@ -64,7 +64,7 @@ async function run() {
         process.execPath,
         "--preload",
         preload,
-        resolve("dist/server/main.js"),
+        resolve("tests/support/test-server-entry.ts"),
       ],
       env: {
         ...process.env,
@@ -543,6 +543,8 @@ async function run() {
       {
         expectedSongId: staff.id,
         stoppedConfirmed: true,
+        expectedAttemptId: null,
+        expectedOwnerEpoch: 0,
       },
       401,
     );
@@ -552,6 +554,8 @@ async function run() {
       {
         expectedSongId: staff.id,
         stoppedConfirmed: false,
+        expectedAttemptId: null,
+        expectedOwnerEpoch: 0,
       },
       400,
       undefined,
@@ -563,6 +567,8 @@ async function run() {
       {
         expectedSongId: "stale",
         stoppedConfirmed: true,
+        expectedAttemptId: null,
+        expectedOwnerEpoch: 0,
       },
       409,
       undefined,
@@ -574,6 +580,8 @@ async function run() {
       {
         expectedSongId: staff.id,
         stoppedConfirmed: true,
+        expectedAttemptId: null,
+        expectedOwnerEpoch: 0,
       },
       200,
       undefined,
@@ -589,6 +597,8 @@ async function run() {
       {
         expectedSongId: staff.id,
         stoppedConfirmed: true,
+        expectedAttemptId: null,
+        expectedOwnerEpoch: 0,
       },
       409,
       undefined,

@@ -4,14 +4,17 @@ import { NowPlayingCard } from "./now-playing-card";
 import { SettingsPanel } from "./settings-panel";
 import { HistoryList, QueueList } from "./song-list";
 import { admin } from "./styles";
+import { useRecoveryFence } from "./use-recovery-fence";
 
 type SongsTabProps = {
   snap: Snapshot | null;
   act: (path: string, body?: unknown, method?: string) => Promise<void>;
+  api: (path: string, options?: RequestInit) => Promise<Response>;
 };
 
-export function SongsTab({ snap, act }: SongsTabProps) {
+export function SongsTab({ snap, act, api }: SongsTabProps) {
   const np = snap?.nowPlaying ?? null;
+  const recovery = useRecoveryFence(np, api);
   const queue = snap?.queue ?? [];
   const history = snap?.history ?? [];
 
@@ -30,6 +33,7 @@ export function SongsTab({ snap, act }: SongsTabProps) {
         <div className={admin.stack}>
           <NowPlayingCard
             np={np}
+            recovery={recovery}
             onPrevious={() => act("/api/admin/previous")}
             onTogglePlayback={() =>
               act(
@@ -39,9 +43,9 @@ export function SongsTab({ snap, act }: SongsTabProps) {
               )
             }
             onSkip={() => act("/api/admin/skip")}
-            onConfirmStopped={() =>
+            onConfirmStopped={(fence) =>
               act("/api/admin/confirm-stopped", {
-                expectedSongId: np?.song.id,
+                ...fence,
                 stoppedConfirmed: true,
               })
             }
