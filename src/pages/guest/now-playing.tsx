@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { art, fmt } from "../shared";
+import { art, fmt, playbackStatusLabel } from "../shared";
 import type { NowPlayingView, SongView } from "../types";
 import { PlaybackSheet } from "./playback-sheet";
 
@@ -27,18 +27,23 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
         >
           <img
             className="size-12 shrink-0 rounded-lg bg-[var(--card-bg)] object-cover"
-            src={art(npSong.artworkUrl)}
+            src={art(npSong.artwork)}
             alt=""
           />
           <div className="min-w-0 flex-1">
             <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[0.93rem] leading-[1.4] font-bold">
-              {npSong.trackName}
+              {npSong.title}
             </div>
             <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-[0.78rem] text-[var(--guest-muted)]">
-              {`${npSong.artistName} · ${npSong.requestedBy}`}
+              {np.status === "playing"
+                ? `${npSong.artist} · ${npSong.requestedBy}`
+                : `${playbackStatusLabel[np.status]} · ${npSong.artist}`}
             </div>
           </div>
-          <div className="flex h-4 shrink-0 items-end gap-[2.5px] pr-1 [&_i]:w-[3px] [&_i]:rounded-sm [&_i]:bg-[var(--guest-accent)] [&_i]:animate-[eqb_0.9s_ease-in-out_infinite] motion-reduce:[&_i]:animate-none [&_i:nth-child(1)]:h-[60%] [&_i:nth-child(2)]:h-full [&_i:nth-child(2)]:[animation-delay:0.25s] [&_i:nth-child(3)]:h-[45%] [&_i:nth-child(3)]:[animation-delay:0.5s]">
+          <div
+            aria-hidden="true"
+            className={`flex h-4 shrink-0 items-end gap-[2.5px] pr-1 [&_i]:w-[3px] [&_i]:rounded-sm [&_i]:bg-[var(--guest-accent)] ${np.status === "playing" ? "[&_i]:animate-[eqb_0.9s_ease-in-out_infinite]" : ""} motion-reduce:[&_i]:animate-none [&_i:nth-child(1)]:h-[60%] [&_i:nth-child(2)]:h-full [&_i:nth-child(2)]:[animation-delay:0.25s] [&_i:nth-child(3)]:h-[45%] [&_i:nth-child(3)]:[animation-delay:0.5s]`}
+          >
             <i />
             <i />
             <i />
@@ -51,17 +56,17 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
             <div className="text-center">
               <img
                 className="mx-auto mt-3 mb-6 block aspect-square w-[min(68vw,290px,38dvh)] rounded-[19px] bg-[var(--card-bg)] object-cover"
-                src={art(npSong.artworkUrl)}
+                src={art(npSong.artwork)}
                 alt=""
               />
               <div className="text-[0.74rem] font-extrabold tracking-[0.03em] text-[var(--guest-accent)] uppercase">
-                지금 재생 중
+                {playbackStatusLabel[np.status]}
               </div>
               <div className="mx-auto mt-[9px] mb-1 max-w-[28ch] text-[clamp(1.3rem,5vw,1.8rem)] leading-tight font-extrabold tracking-[-0.02em] text-balance [overflow-wrap:anywhere]">
-                {npSong.trackName}
+                {npSong.title}
               </div>
               <div className="text-[0.95rem] text-[var(--guest-muted)] [overflow-wrap:anywhere]">
-                {npSong.artistName}
+                {npSong.artist}
               </div>
               <div className="mt-2.5 inline-block rounded-full bg-[var(--guest-accent-wash)] px-3.5 py-2 text-xs text-[var(--guest-ink)]">
                 {`${npSong.requestedBy}님이 신청`}
@@ -120,15 +125,15 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
                     </span>
                     <img
                       className="size-11 shrink-0 rounded-[9px] bg-[var(--card-bg)] object-cover"
-                      src={art(s.artworkUrl)}
+                      src={art(s.artwork)}
                       alt=""
                     />
                     <div className="min-w-0 flex-1">
                       <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[0.88rem] leading-[1.35] font-semibold text-[var(--guest-ink)] [overflow-wrap:anywhere]">
-                        {s.trackName}
+                        {s.title}
                       </div>
                       <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[0.74rem] leading-[1.4] text-[var(--guest-muted)]">
-                        {`${s.artistName} · ${s.requestedBy}`}
+                        {`${s.artist} · ${s.requestedBy}`}
                       </div>
                     </div>
                     {my ? (
@@ -141,7 +146,7 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
                         type="button"
                         className="size-11 shrink-0 cursor-pointer rounded-[11px] border-0 bg-[color-mix(in_srgb,var(--guest-accent)_16%,var(--guest-surface))] text-[0.76rem] font-bold text-[var(--guest-accent)] hover:brightness-115 active:scale-96"
                         onClick={() => onCancel(s.id)}
-                        aria-label={`${s.trackName} 신청 취소`}
+                        aria-label={`${s.title} 신청 취소`}
                       >
                         취소
                       </button>

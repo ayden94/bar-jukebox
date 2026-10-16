@@ -5,33 +5,18 @@ import { BunHttpApplicationAdapter } from "@fluojs/platform-bun";
 import { FluoFactory } from "@fluojs/runtime";
 
 import { createJukeboxModule } from "./app";
-import {
-  playbackService,
-  queueRepository,
-  queueService,
-  settingsRepository,
-  settingsService,
-} from "./domains/providers";
-import { initDatabase } from "./infra/db";
+import { createJukeboxRuntime } from "./domains/providers";
+import { createDatabase, initDatabase } from "./infra/db";
 import { themeScript } from "./pages/theme";
 
-// 재시작 시 SQLite에서 상태 복원 (큐/히스토리/재생중/설정)
-await initDatabase();
-const storedNowPlaying = await queueRepository.loadNowPlaying();
-queueService.hydrate({
-  nowPlaying: storedNowPlaying
-    ? {
-        song: storedNowPlaying.song,
-        startedAt: storedNowPlaying.startedAt,
-        status: "playing",
-        positionSec: 0,
-        durationSec: null,
-      }
-    : null,
-  queue: await queueRepository.loadQueue(),
-  history: await queueRepository.loadHistory(),
-});
-settingsService.hydrate(await settingsRepository.load());
+const connection = createDatabase(
+  process.env.DATABASE_URL ?? "file:jukebox.sqlite",
+);
+await initDatabase(connection);
+const runtime = await createJukeboxRuntime(
+  { playbackDisabled: process.env.PLAYBACK_DISABLED === "1" },
+  connection,
+);
 
 async function loadClientManifest(): Promise<unknown> {
   const candidates = [
@@ -63,6 +48,7 @@ function resolveClientDirectory(): URL {
 }
 
 const AppModule = createJukeboxModule({
+  runtime,
   clientDirectory: resolveClientDirectory(),
   manifest,
 });
@@ -91,7 +77,7 @@ if (process.send) {
 }
 
 if (process.env.PLAYBACK_DISABLED !== "1") {
-  playbackService.start().catch((e) => {
+  runtime.playbackService.start().catch((e) => {
     console.error("playback loop crashed:", e);
     process.exitCode = 1;
     void app.close();

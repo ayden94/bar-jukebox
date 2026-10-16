@@ -1,5 +1,6 @@
 export type { AuthAction, AuthPort, AuthState } from "./auth";
 export type {
+  ArtworkPort,
   ArtworkRef,
   CatalogPage,
   CatalogPort,

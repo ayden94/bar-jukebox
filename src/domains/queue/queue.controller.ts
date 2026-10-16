@@ -11,6 +11,7 @@ import {
   RequestDto,
 } from "@fluojs/http";
 import { deviceIdOf } from "../../middleware/device-cookie.middleware";
+import type { TrackRef } from "../../music/contracts";
 import { SearchService, SongLookupError } from "../search/search.service";
 import { SettingsService } from "../settings/settings.service";
 import { makeSong } from "../shared/song";
@@ -55,7 +56,7 @@ export class QueueController {
       );
     }
 
-    const hit = await lookupSong(this.search, dto.trackId);
+    const hit = await lookupSong(this.search, dto);
     if (this.settings.isRequestsPaused()) {
       throw new ForbiddenException("지금은 곡 신청을 받고 있지 않아요");
     }
@@ -65,6 +66,11 @@ export class QueueController {
       maxPerDevice: limits.maxPerDevice,
       maxPerTable: limits.maxPerTable,
     });
+    if (denied === "provider-conflict") {
+      throw new ConflictException(
+        "저장된 곡의 음악 서비스 설정을 확인해주세요",
+      );
+    }
     if (denied === "device-limit") {
       throw new ConflictException(
         limits.maxPerDevice === 1
@@ -82,7 +88,7 @@ export class QueueController {
     }
 
     console.log(
-      `+ request: ${song.trackName} — ${song.artistName} (${song.requestedBy})`,
+      `+ request: ${song.title} — ${song.artist} (${song.requestedBy})`,
     );
     return { ok: true, song: publicSong(song, deviceId) };
   }
@@ -99,9 +105,9 @@ export class QueueController {
   }
 }
 
-export async function lookupSong(search: SearchService, trackId: number) {
+export async function lookupSong(search: SearchService, ref: TrackRef) {
   try {
-    return await search.lookup(trackId);
+    return await search.lookup(ref);
   } catch (error) {
     if (!(error instanceof SongLookupError)) throw error;
     if (error.code === "upstream-unavailable") {

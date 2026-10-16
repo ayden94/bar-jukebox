@@ -22,13 +22,13 @@ async function fixture() {
 
 function song(id: string, overrides: Partial<Song> = {}): Song {
   return {
+    formatVersion: 1,
     id,
-    trackId: id.charCodeAt(0),
-    trackName: "테스트 곡",
-    artistName: "테스트 가수",
-    artworkUrl: "",
-    albumUrl: "music://test",
-    trackNumber: 1,
+    ref: { providerId: "test-provider", trackId: id },
+    title: "테스트 곡",
+    artist: "테스트 가수",
+    artwork: null,
+    sourceUrl: null,
     durationSec: 200,
     requestedBy: "바텐더",
     deviceId: null,
@@ -269,14 +269,26 @@ for (const table of ["queue", "history", "now_playing"] as const) {
 }
 
 const invalidFields: Record<keyof Song, unknown[]> = {
+  formatVersion: [0, 2, "1", null],
   id: ["", 1, "다른 행"],
-  trackId: [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "97"],
-  trackName: ["", " ", null],
-  artistName: ["", null],
-  artworkUrl: [null, 1],
-  albumUrl: ["", "https://music.apple.com/album/1", "music://"],
-  trackNumber: [0, -1, 1.5, 201],
-  durationSec: [0, -1, "200"],
+  ref: [
+    null,
+    [],
+    {},
+    { providerId: "", trackId: "a" },
+    { providerId: "test", trackId: 97 },
+    { providerId: "test", trackId: "" },
+  ],
+  title: ["", " ", null],
+  artist: ["", null],
+  artwork: [
+    1,
+    {},
+    { providerId: "", artworkId: "a" },
+    { providerId: "test", artworkId: "" },
+  ],
+  sourceUrl: ["", 1],
+  durationSec: [-1, "200"],
   requestedBy: ["", null],
   deviceId: ["", 1],
   tableId: [0, -1, 1.5, "1"],

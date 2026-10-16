@@ -37,25 +37,28 @@ function isSong(value: unknown): value is Song {
   const song = value as Record<string, unknown>;
   return (
     nonemptyString(song.id) &&
-    positiveSafeInteger(song.trackId) &&
-    nonemptyString(song.trackName) &&
-    nonemptyString(song.artistName) &&
-    typeof song.artworkUrl === "string" &&
-    typeof song.albumUrl === "string" &&
-    song.albumUrl.startsWith("music://") &&
-    song.albumUrl.slice("music://".length).trim().length > 0 &&
-    positiveSafeInteger(song.trackNumber) &&
-    song.trackNumber <= 200 &&
+    song.formatVersion === 1 &&
+    isReference(song.ref, "trackId") &&
+    nonemptyString(song.title) &&
+    nonemptyString(song.artist) &&
+    (song.artwork === null || isReference(song.artwork, "artworkId")) &&
+    (song.sourceUrl === null || nonemptyString(song.sourceUrl)) &&
     (song.durationSec === null ||
       (typeof song.durationSec === "number" &&
         Number.isFinite(song.durationSec) &&
-        song.durationSec > 0)) &&
+        song.durationSec >= 0)) &&
     nonemptyString(song.requestedBy) &&
     (song.deviceId === null || nonemptyString(song.deviceId)) &&
     (song.tableId === null || positiveSafeInteger(song.tableId)) &&
     typeof song.isStaff === "boolean" &&
     isStoredTimestamp(song.requestedAt)
   );
+}
+
+function isReference(value: unknown, key: "trackId" | "artworkId"): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const ref = value as Record<string, unknown>;
+  return nonemptyString(ref.providerId) && nonemptyString(ref[key]);
 }
 
 export function decodePersistedSong(
@@ -72,5 +75,25 @@ export function decodePersistedSong(
   if (!isSong(song) || (table !== "now_playing" && song.id !== rowId)) {
     throw new PersistedSongError(table, rowId, "invalid-song");
   }
-  return song;
+  // 저장 JSON에 남은 예전 native 자료나 추가 필드를 공개 모델에 섞지 않아요.
+  return {
+    formatVersion: 1,
+    id: song.id,
+    ref: { providerId: song.ref.providerId, trackId: song.ref.trackId },
+    title: song.title,
+    artist: song.artist,
+    durationSec: song.durationSec,
+    artwork: song.artwork
+      ? {
+          providerId: song.artwork.providerId,
+          artworkId: song.artwork.artworkId,
+        }
+      : null,
+    sourceUrl: song.sourceUrl,
+    requestedBy: song.requestedBy,
+    deviceId: song.deviceId,
+    tableId: song.tableId,
+    isStaff: song.isStaff,
+    requestedAt: song.requestedAt,
+  };
 }

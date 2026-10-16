@@ -1,4 +1,15 @@
-export const SEARCH_PAGE = 20;
+import type { NowPlayingView, TrackMetadata, TrackRef } from "./types";
+
+export const playbackStatusLabel: Record<NowPlayingView["status"], string> = {
+  starting: "재생 준비 중",
+  playing: "재생 중",
+  paused: "일시정지",
+  waiting: "재생 대기 중",
+  "reconciliation-required": "재생 상태 확인 필요",
+};
+
+export const trackKey = (ref: TrackRef): string =>
+  JSON.stringify([ref.providerId, ref.trackId]);
 
 export function apiErrorMessage(body: unknown, fallback: string): string {
   if (!body || typeof body !== "object" || !("error" in body)) {
@@ -14,8 +25,10 @@ export function apiErrorMessage(body: unknown, fallback: string): string {
     : fallback;
 }
 
-export const art = (u: string): string =>
-  u ? `/api/artwork?u=${encodeURIComponent(u)}` : u;
+export const art = (artwork: TrackMetadata["artwork"]): string | undefined =>
+  artwork
+    ? `/api/artwork?providerId=${encodeURIComponent(artwork.providerId)}&artworkId=${encodeURIComponent(artwork.artworkId)}`
+    : undefined;
 
 export function fmt(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return "-:--";

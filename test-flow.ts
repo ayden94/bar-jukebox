@@ -3,17 +3,17 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createClient } from "@libsql/client";
 import { startServerProcess } from "./tests/support/server-process";
 
 // Runs the built server against a private SQLite file and intercepts iTunes only in its child process.
 type Song = {
   id: string;
-  trackId: number;
-  trackName: string;
-  artistName: string;
-  albumUrl: string;
-  artworkUrl: string;
-  trackNumber: number;
+  ref: { providerId: string; trackId: string };
+  title: string;
+  artist: string;
+  artwork: { providerId: string; artworkId: string } | null;
+  sourceUrl: string | null;
   durationSec: number;
   requestedBy: string;
   isMine: boolean;
@@ -185,13 +185,14 @@ async function run() {
     assert.equal(search.data.hits.length, 6);
     const hit = search.data.hits[0];
     assert(hit);
-    assert.equal(hit.trackName, "Fixture Song 101");
+    assert.equal(hit.title, "Fixture Song 101");
     const request = (id: number, cookie: string, extra: object = {}) =>
       check(
         "/api/request",
         "POST",
         {
-          trackId: id,
+          providerId: "apple-music",
+          trackId: String(id),
           tableId: table.id,
           tableSecret: a.secret,
           ...extra,
@@ -203,7 +204,8 @@ async function run() {
       "/api/request",
       "POST",
       {
-        trackId: 101,
+        providerId: "apple-music",
+        trackId: "101",
         tableId: table.id,
         tableSecret: a.secret,
         trackName: "INJECTED",
@@ -220,17 +222,15 @@ async function run() {
     );
     const canonical = await request(101, a.cookie);
     const first = canonical.data.song as Song;
-    assert.equal(first.trackName, "Fixture Song 101");
-    assert.equal(first.artistName, "Fixture Artist 0");
+    assert.equal(first.title, "Fixture Song 101");
+    assert.equal(first.artist, "Fixture Artist 0");
+    assert.deepEqual(first.ref, { providerId: "apple-music", trackId: "101" });
+    assert.equal("albumUrl" in first, false);
+    assert.equal("trackNumber" in first, false);
     assert.equal(
-      first.albumUrl,
-      "music://music.apple.com/us/album/fixture/id900",
-    );
-    assert.equal(
-      first.artworkUrl,
+      first.artwork?.artworkId,
       "https://is1-ssl.mzstatic.com/image/300x300bb.jpg",
     );
-    assert.equal(first.trackNumber, 1);
     assert.equal(first.durationSec, 180);
     assert.equal(first.isStaff, false);
     assert.equal(
@@ -241,28 +241,48 @@ async function run() {
     await check(
       "/api/request",
       "POST",
-      { trackId: 999, tableId: table.id, tableSecret: a.secret },
+      {
+        providerId: "apple-music",
+        trackId: "999",
+        tableId: table.id,
+        tableSecret: a.secret,
+      },
       400,
       b.cookie,
     );
     await check(
       "/api/request",
       "POST",
-      { trackId: 0, tableId: table.id, tableSecret: a.secret },
+      {
+        providerId: "apple-music",
+        trackId: "0",
+        tableId: table.id,
+        tableSecret: a.secret,
+      },
       400,
       b.cookie,
     );
     await check(
       "/api/request",
       "POST",
-      { trackId: 102, tableId: table.id, tableSecret: "invalid" },
+      {
+        providerId: "apple-music",
+        trackId: "102",
+        tableId: table.id,
+        tableSecret: "invalid",
+      },
       403,
       b.cookie,
     );
     await check(
       "/api/request",
       "POST",
-      { trackId: 102, tableId: table.id, tableSecret: a.secret },
+      {
+        providerId: "apple-music",
+        trackId: "102",
+        tableId: table.id,
+        tableSecret: a.secret,
+      },
       409,
       a.cookie,
     );
@@ -318,7 +338,12 @@ async function run() {
     await check(
       "/api/request",
       "POST",
-      { trackId: 103, tableId: table.id, tableSecret: a.secret },
+      {
+        providerId: "apple-music",
+        trackId: "103",
+        tableId: table.id,
+        tableSecret: a.secret,
+      },
       409,
       b.cookie,
     );
@@ -335,7 +360,12 @@ async function run() {
         call(
           "/api/request",
           "POST",
-          { trackId, tableId: table.id, tableSecret: a.secret },
+          {
+            providerId: "apple-music",
+            trackId: String(trackId),
+            tableId: table.id,
+            tableSecret: a.secret,
+          },
           b.cookie,
         ),
       ),
@@ -351,13 +381,13 @@ async function run() {
       await check(
         "/api/admin/add",
         "POST",
-        { trackId: 104 },
+        { providerId: "apple-music", trackId: "104" },
         200,
         undefined,
         true,
       )
     ).data.song as Song;
-    assert.equal(staff.trackName, "Fixture Song 104");
+    assert.equal(staff.title, "Fixture Song 104");
     const ids = [first.id, second.id, third.id, staff.id];
     assert.deepEqual(
       (await state()).queue.map((s) => s.id),
@@ -380,7 +410,7 @@ async function run() {
       await check(
         "/api/admin/add",
         "POST",
-        { trackId: 105 },
+        { providerId: "apple-music", trackId: "105" },
         200,
         undefined,
         true,
@@ -484,6 +514,84 @@ async function run() {
         if (!controller.signal.aborted) throw error;
       });
     }
+    await stopServer();
+    const restoredDb = createClient({
+      url: `file:${join(directory, "flow.sqlite")}`,
+    });
+    try {
+      await restoredDb.batch(
+        [
+          {
+            sql: "INSERT INTO now_playing (id, data, started_at) SELECT 1, data, 123 FROM queue WHERE id = ?",
+            args: [staff.id],
+          },
+          { sql: "DELETE FROM queue WHERE id = ?", args: [staff.id] },
+        ],
+        "write",
+      );
+    } finally {
+      restoredDb.close();
+    }
+    await spawnServer();
+    const restoredState = await state();
+    assert.equal(restoredState.nowPlaying?.song.id, staff.id);
+    await check(
+      "/api/admin/confirm-stopped",
+      "POST",
+      {
+        expectedSongId: staff.id,
+        stoppedConfirmed: true,
+      },
+      401,
+    );
+    await check(
+      "/api/admin/confirm-stopped",
+      "POST",
+      {
+        expectedSongId: staff.id,
+        stoppedConfirmed: false,
+      },
+      400,
+      undefined,
+      true,
+    );
+    await check(
+      "/api/admin/confirm-stopped",
+      "POST",
+      {
+        expectedSongId: "stale",
+        stoppedConfirmed: true,
+      },
+      409,
+      undefined,
+      true,
+    );
+    await check(
+      "/api/admin/confirm-stopped",
+      "POST",
+      {
+        expectedSongId: staff.id,
+        stoppedConfirmed: true,
+      },
+      200,
+      undefined,
+      true,
+    );
+    const recovered = await state();
+    assert.equal(recovered.nowPlaying, null);
+    assert.deepEqual(recovered.queue, restoredState.queue);
+    assert.equal(recovered.history[0]?.id, staff.id);
+    await check(
+      "/api/admin/confirm-stopped",
+      "POST",
+      {
+        expectedSongId: staff.id,
+        stoppedConfirmed: true,
+      },
+      409,
+      undefined,
+      true,
+    );
     console.log(
       "Isolated API flow passed (auth, cookies, metadata, limits, persistence, SSE).",
     );

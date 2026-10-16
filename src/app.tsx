@@ -26,7 +26,7 @@ import { AdminPageDto } from "./domains/admin/dto";
 import { EventsController } from "./domains/events/events.controller";
 import { SseBroker } from "./domains/events/sse-broker";
 import { PlaybackService } from "./domains/playback/playback.service";
-import { JukeboxBusToken, jukeboxProviders } from "./domains/providers";
+import { JukeboxBusToken, type JukeboxRuntime } from "./domains/providers";
 import { QueueController } from "./domains/queue/queue.controller";
 import { QueueService } from "./domains/queue/queue.service";
 import { SearchController } from "./domains/search/search.controller";
@@ -35,7 +35,7 @@ import { SettingsService } from "./domains/settings/settings.service";
 import { GuestQueryDto } from "./domains/table/dto";
 import { TableController } from "./domains/table/table.controller";
 import { TableService } from "./domains/table/table.service";
-import { type Drizzle, database, libsqlClient } from "./infra/db";
+import type { Drizzle } from "./infra/db";
 import {
   DeviceCookieMiddleware,
   deviceIdOf,
@@ -50,6 +50,7 @@ type JukeboxDrizzleTxOptions = NonNullable<
 type JukeboxDrizzleTx = Parameters<Parameters<Drizzle["transaction"]>[0]>[0];
 
 export type CreateJukeboxModuleOptions = {
+  readonly runtime: JukeboxRuntime;
   readonly clientDirectory: URL;
   readonly manifest: unknown;
 };
@@ -264,18 +265,17 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     }
   }
 
-  // 도메인 싱글턴(providers.ts)은 여기 한 곳에만 등록하고 exports로 공유한다 — 중복 등록 경고 방지.
-  // drizzle 핸들을 fluo 라이프사이클에 연결한다 (앱 종료 시 libsql close).
+  // 부팅에서 만든 인스턴스를 한 번 등록하고 종료 시 실행기와 DB를 정리해요.
   @Module({
     imports: [
       DrizzleModule.forRoot<Drizzle, JukeboxDrizzleTx, JukeboxDrizzleTxOptions>(
         {
-          database,
-          dispose: () => libsqlClient.close(),
+          database: options.runtime.database,
+          dispose: () => options.runtime.dispose(),
         },
       ),
     ],
-    providers: jukeboxProviders,
+    providers: options.runtime.providers,
     exports: [
       QueueService,
       SettingsService,

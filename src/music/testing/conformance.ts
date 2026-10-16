@@ -271,8 +271,7 @@ export function defineProviderContractTests(
         ).toBe("accepted");
         fixture.flushObservations();
         const stop = await stopped;
-        expect(stop.state).not.toBe("ended");
-        expect(stop.state).not.toBe("playing");
+        expect(stop.state).toBe("stopped");
       } finally {
         abort.abort();
         await disposeFixture(fixture);

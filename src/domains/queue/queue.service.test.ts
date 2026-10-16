@@ -53,12 +53,12 @@ function deferred<T>() {
 function song(id: string, overrides: Partial<Song> = {}): Song {
   return {
     id,
-    trackId: id.charCodeAt(0),
-    trackName: "테스트 곡",
-    artistName: "테스트 가수",
-    artworkUrl: "",
-    albumUrl: "music://test",
-    trackNumber: 1,
+    formatVersion: 1,
+    ref: { providerId: "fixture", trackId: id },
+    title: "테스트 곡",
+    artist: "테스트 가수",
+    artwork: null,
+    sourceUrl: null,
     durationSec: 200,
     requestedBy: "테이블 1",
     deviceId: id,
@@ -81,14 +81,14 @@ test("기기와 트랙 활성 여부는 대기 중과 재생 중을 모두 세�
   await queue.enqueue(song("b"));
   expect(queue.deviceHasActive("a")).toBe(true);
   expect(queue.deviceHasActive("c")).toBe(false);
-  expect(queue.trackIsActive(97)).toBe(true);
+  expect(queue.trackIsActive(song("a").ref)).toBe(true);
   await queue.takeAndStart();
   expect(queue.deviceHasActive("a")).toBe(true);
-  expect(queue.trackIsActive(97)).toBe(true);
+  expect(queue.trackIsActive(song("a").ref)).toBe(true);
   await queue.finishNowPlaying("done", "a");
   expect(queue.deviceHasActive("a")).toBe(false);
   expect(queue.deviceHasActive("b")).toBe(true);
-  expect(queue.trackIsActive(97)).toBe(false);
+  expect(queue.trackIsActive(song("a").ref)).toBe(false);
 });
 
 test("본인 곡만 취소할 수 있어요", async () => {
@@ -99,6 +99,74 @@ test("본인 곡만 취소할 수 있어요", async () => {
   expect(await queue.removeOwnedFromQueue("b", "a")).toBe(false);
   expect(await queue.removeOwnedFromQueue("a", "a")).toBe(true);
   expect(queue.snapshot().queue.map((entry) => entry.id)).toEqual(["b"]);
+});
+
+test("중복 곡은 공급자와 대소문자를 포함한 식별자로 판정해요", async () => {
+  const queue = new QueueService(memoryRepository());
+  const limits = { maxPerDevice: 0, maxPerTable: 0 };
+  await queue.enqueue(
+    song("a", { ref: { providerId: "one", trackId: "Ab/01" } }),
+    limits,
+  );
+  expect(
+    await queue.enqueue(
+      song("b", { ref: { providerId: "two", trackId: "Ab/01" } }),
+      limits,
+    ),
+  ).toBeNull();
+  expect(
+    await queue.enqueue(
+      song("c", { ref: { providerId: "one", trackId: "ab/01" } }),
+      limits,
+    ),
+  ).toBeNull();
+  expect(
+    await queue.enqueue(
+      song("d", { ref: { providerId: "one", trackId: "Ab/01" } }),
+      limits,
+    ),
+  ).toBe("duplicate-track");
+});
+
+test("최근 기록이 다른 공급자이면 기록을 건너뛰지 않고 현재 곡을 재시작해요", async () => {
+  const queue = new QueueService(memoryRepository());
+  const current = song("current");
+  const foreign = song("foreign", {
+    ref: { providerId: "other", trackId: "x" },
+  });
+  const older = song("older");
+  queue.hydrate({
+    queue: [],
+    history: [foreign, older],
+    nowPlaying: {
+      song: current,
+      startedAt: 1,
+      status: "paused",
+      positionSec: 1,
+      durationSec: 200,
+    },
+  });
+  expect(await queue.previous(current.id, false)).toEqual(current);
+  expect(queue.snapshot().history).toEqual([foreign, older]);
+  expect(queue.snapshot().queue).toEqual([]);
+  expect(queue.snapshot().nowPlaying?.status).toBe("paused");
+});
+
+test("선택 공급자와 다른 활성 곡은 보존하고 직원 신청과 재생도 보류해요", async () => {
+  const repo = memoryRepository();
+  const queue = new QueueService(repo, "fixture");
+  const foreign = song("foreign", {
+    ref: { providerId: "other", trackId: "x" },
+  });
+  queue.hydrate({ queue: [foreign], history: [], nowPlaying: null });
+  const before = queue.snapshot();
+  expect(queue.hasProviderConflict()).toBe(true);
+  expect(await queue.enqueue(song("staff", { isStaff: true }))).toBe(
+    "provider-conflict",
+  );
+  expect(await queue.takeAndStart()).toBeNull();
+  expect(queue.snapshot()).toEqual(before);
+  expect(await repo.loadNowPlaying()).toBeNull();
 });
 
 test("기기 상한은 저장과 같은 순서로 검사해요", async () => {
@@ -125,7 +193,7 @@ test("동시 신청도 테이블 상한과 중복 트랙을 넘지 못해요", a
         maxPerDevice: 0,
         maxPerTable: 1,
       }),
-      queue.enqueue(song("c", { trackId: 97 }), {
+      queue.enqueue(song("c", { ref: song("a").ref }), {
         maxPerDevice: 0,
         maxPerTable: 0,
       }),
@@ -154,7 +222,12 @@ test("상한 0은 무제한이고 바텐더는 상한과 중복 검사를 건너
   ).toBeNull();
   expect(
     await queue.enqueue(
-      song("c", { deviceId: "d", tableId: 1, trackId: 97, isStaff: true }),
+      song("c", {
+        deviceId: "d",
+        tableId: 1,
+        ref: song("a").ref,
+        isStaff: true,
+      }),
     ),
   ).toBeNull();
 });

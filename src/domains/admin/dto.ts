@@ -1,5 +1,14 @@
-import { FromCookie, Optional } from "@fluojs/http";
-import { IsString } from "@fluojs/validation";
+import { FromBody, FromCookie, Optional } from "@fluojs/http";
+import { IsBoolean, IsString } from "@fluojs/validation";
+
+export class ConfirmStoppedDto {
+  @IsString()
+  @FromBody("expectedSongId")
+  expectedSongId = "";
+  @IsBoolean()
+  @FromBody("stoppedConfirmed")
+  stoppedConfirmed = false;
+}
 
 export class AdminPageDto {
   @Optional()

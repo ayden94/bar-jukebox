@@ -1,12 +1,8 @@
-export type Song = {
+import type { TrackMetadata } from "../../music/contracts";
+
+export type Song = TrackMetadata & {
+  formatVersion: 1;
   id: string;
-  trackId: number;
-  trackName: string;
-  artistName: string;
-  artworkUrl: string;
-  albumUrl: string;
-  trackNumber: number;
-  durationSec: number | null;
   requestedBy: string;
   deviceId: string | null;
   tableId: number | null;
@@ -17,7 +13,12 @@ export type Song = {
 export type NowPlaying = {
   song: Song;
   startedAt: number;
-  status: "playing" | "paused";
+  status:
+    | "starting"
+    | "playing"
+    | "paused"
+    | "waiting"
+    | "reconciliation-required";
   positionSec: number;
   durationSec: number | null;
 };

@@ -5,12 +5,12 @@ import type { Song } from "./types";
 test("공개 상태는 인증 식별자 없이 본인 곡만 구분해요", () => {
   const song: Song = {
     id: "song",
-    trackId: 1,
-    trackName: "곡",
-    artistName: "가수",
-    artworkUrl: "",
-    albumUrl: "",
-    trackNumber: 1,
+    formatVersion: 1,
+    ref: { providerId: "fixture", trackId: "1" },
+    title: "곡",
+    artist: "가수",
+    artwork: null,
+    sourceUrl: null,
     durationSec: 200,
     deviceId: "private-device",
     requestedBy: "테이블",

@@ -1,7 +1,9 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useInfiniteScroll } from "../hooks";
-import { apiErrorMessage, art, fmt, SEARCH_PAGE } from "../shared";
-import type { SearchHit } from "../types";
+import { SearchMoreButton } from "../search-more-button";
+import { apiErrorMessage, art, fmt, trackKey } from "../shared";
+import type { TrackMetadata } from "../types";
+import { useTrackSearch } from "../use-track-search";
 
 type SearchPanelProps = {
   blocked: boolean;
@@ -17,75 +19,42 @@ export function SearchPanel({
   showToast,
 }: SearchPanelProps) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<SearchHit[]>([]);
-  const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE);
-  const [searching, setSearching] = useState(false);
-  const [searchedTerm, setSearchedTerm] = useState("");
+  const {
+    results,
+    searching,
+    searchedTerm,
+    loadingMore,
+    pageError,
+    hasMore,
+    search,
+    loadMore,
+  } = useTrackSearch((message) => showToast(message, "err"));
   const [requestedTrack, setRequestedTrack] = useState<string | null>(null);
-  const searchAbort = useRef<AbortController | null>(null);
-  const searchVersion = useRef(0);
   const canSearch = !searching && q.trim() !== "" && q.trim() !== searchedTerm;
-  useEffect(
-    () => () => {
-      ++searchVersion.current;
-      searchAbort.current?.abort();
-    },
-    [],
-  );
   const requestPending = useRef(false);
   const moreRef = useInfiniteScroll(
-    visibleCount < results.length,
-    () => setVisibleCount((c) => c + SEARCH_PAGE),
+    hasMore && !loadingMore && !pageError,
+    loadMore,
     "400px 0px",
   );
 
   const doSearch = async () => {
     if (!canSearch) return;
-    const term = q.trim();
-    searchAbort.current?.abort();
-    const version = ++searchVersion.current;
-    const controller = new AbortController();
-    searchAbort.current = controller;
-    setSearching(true);
-    setSearchedTerm("");
-    setResults([]);
-    try {
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(term)}`,
-        { signal: controller.signal },
-      );
-      const result = await response.json();
-      if (version !== searchVersion.current) return;
-      if (!response.ok || result.error) {
-        showToast(
-          apiErrorMessage(result, `검색 실패 (HTTP ${response.status})`),
-          "err",
-        );
-        return;
-      }
-      setResults(result.hits ?? []);
-      setSearchedTerm(term);
-      setVisibleCount(SEARCH_PAGE);
-    } catch {
-      if (version === searchVersion.current) {
-        showToast("검색 중 오류가 발생했어요", "err");
-      }
-    } finally {
-      if (version === searchVersion.current) setSearching(false);
-    }
+    await search(q);
   };
 
-  const request = async (hit: SearchHit) => {
+  const request = async (hit: TrackMetadata) => {
     if (requestPending.current) return;
     requestPending.current = true;
-    setRequestedTrack(String(hit.trackId));
+    setRequestedTrack(trackKey(hit.ref));
     const params = new URLSearchParams(window.location.search);
     try {
       const r = await fetch("/api/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          trackId: hit.trackId,
+          providerId: hit.ref.providerId,
+          trackId: hit.ref.trackId,
           tableId: Number(params.get("t")),
           tableSecret: params.get("k") ?? "",
         }),
@@ -151,22 +120,22 @@ export function SearchPanel({
               : null}
       </div>
       <ul className="m-0 list-none p-0">
-        {results.slice(0, visibleCount).map((h) => (
+        {results.map((h) => (
           <li
             className="flex min-w-0 items-center gap-[13px] border-b border-[var(--guest-stroke)] py-3"
-            key={h.trackId}
+            key={trackKey(h.ref)}
           >
             <img
               className="size-14 shrink-0 rounded-[11px] bg-[var(--card-bg)] object-cover"
-              src={art(h.artworkUrl)}
+              src={art(h.artwork)}
               alt=""
             />
             <div className="min-w-0 flex-1">
               <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] leading-[1.35] font-semibold text-[var(--guest-ink)] [overflow-wrap:anywhere]">
-                {h.trackName}
+                {h.title}
               </div>
               <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[0.78rem] leading-[1.4] text-[var(--guest-muted)]">
-                {`${h.artistName}${
+                {`${h.artist}${
                   h.durationSec ? ` · ${fmt(h.durationSec)}` : ""
                 }`}
               </div>
@@ -177,17 +146,22 @@ export function SearchPanel({
               disabled={blocked || searching || requestedTrack !== null}
               onClick={() => request(h)}
             >
-              {requestedTrack === String(h.trackId) ? "신청 중" : "신청"}
+              {requestedTrack === trackKey(h.ref) ? "신청 중" : "신청"}
             </button>
           </li>
         ))}
-        {results.length > visibleCount ? (
+        {hasMore ? (
           <li
             className="flex justify-center border-b-0 py-3 text-[0.8rem] text-[var(--guest-muted)]"
             key="more"
             ref={moreRef}
           >
-            ∨ 더 보기
+            <SearchMoreButton
+              className="min-h-11 cursor-pointer border-0 bg-transparent px-3 text-inherit disabled:opacity-55"
+              loading={loadingMore}
+              failed={pageError}
+              onLoad={() => void loadMore()}
+            />
           </li>
         ) : null}
       </ul>

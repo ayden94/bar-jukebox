@@ -4,8 +4,11 @@ type Listener = (event: BusEvent) => void;
 
 const listeners = new Set<Listener>();
 
-export function onChange(listener: Listener): void {
+export function onChange(listener: Listener): () => void {
   listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function emit(event: BusEvent): void {

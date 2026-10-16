@@ -61,6 +61,8 @@ export type CommandOutcome =
     };
 
 export type PlaybackState =
+  // 해당 명령의 오디오 정지가 확인된 상태예요. unknown은 정지 증거가 아니에요.
+  | "stopped"
   | "playing"
   | "paused"
   | "buffering"

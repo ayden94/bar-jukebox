@@ -39,6 +39,12 @@ export function SongsTab({ snap, act }: SongsTabProps) {
               )
             }
             onSkip={() => act("/api/admin/skip")}
+            onConfirmStopped={() =>
+              act("/api/admin/confirm-stopped", {
+                expectedSongId: np?.song.id,
+                stoppedConfirmed: true,
+              })
+            }
           />
           <section className={admin.panel} aria-labelledby="queue-heading">
             <div className={admin.panelHead}>
@@ -78,7 +84,12 @@ export function SongsTab({ snap, act }: SongsTabProps) {
           aria-label="곡 추가와 운영 설정"
         >
           <AddSong
-            onAdd={(hit) => act("/api/admin/add", { trackId: hit.trackId })}
+            onAdd={(hit) =>
+              act("/api/admin/add", {
+                providerId: hit.ref.providerId,
+                trackId: hit.ref.trackId,
+              })
+            }
           />
           <SettingsPanel
             requestsPaused={snap?.requestsPaused ?? false}

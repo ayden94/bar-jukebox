@@ -3,15 +3,21 @@ import { IsArray, IsInt, IsString } from "@fluojs/validation";
 
 // 주의: DTO 상속 시 필드 메타데이터가 부모에도 묶이므로 상속 대신 평탄화한다.
 export class SongInputDto {
-  @IsInt()
+  @IsString()
+  @FromBody("providerId")
+  providerId = "";
+  @IsString()
   @FromBody("trackId")
-  trackId = 0;
+  trackId = "";
 }
 
 export class RequestSongDto {
-  @IsInt()
+  @IsString()
+  @FromBody("providerId")
+  providerId = "";
+  @IsString()
   @FromBody("trackId")
-  trackId = 0;
+  trackId = "";
   @IsInt()
   @FromBody("tableId")
   tableId = 0;
