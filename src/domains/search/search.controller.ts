@@ -34,7 +34,7 @@ export class SearchController {
     const q = dto.q?.trim();
     if (!q) throw new BadRequestException("검색어를 입력해주세요");
     try {
-      return await this.searchService.search(q, dto.cursor || null);
+      return await this.searchService.search(q, dto.cursor);
     } catch (e) {
       console.error("search error:", e);
       throw new InternalServerErrorException("검색 중 오류가 발생했어요");

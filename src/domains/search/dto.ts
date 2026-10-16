@@ -8,7 +8,7 @@ export class SearchQueryDto {
   @Optional()
   @IsString()
   @FromQuery("cursor")
-  cursor = "";
+  cursor: string | null = null;
 }
 
 export class ArtworkQueryDto {

@@ -183,6 +183,8 @@ async function run() {
     await check("/api/table?t=0&k=wrong", "GET", undefined, 403);
     const search = await check("/api/search?q=fixture", "GET", undefined, 200);
     assert.equal(search.data.hits.length, 6);
+    // Apple의 단일 페이지 catalog는 빈 문자열도 제공된 cursor로 거절해요.
+    await check("/api/search?q=fixture&cursor=", "GET", undefined, 500);
     const hit = search.data.hits[0];
     assert(hit);
     assert.equal(hit.title, "Fixture Song 101");
