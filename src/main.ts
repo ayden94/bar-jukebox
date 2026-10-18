@@ -39,6 +39,7 @@ function resolveClientDirectory(): URL {
 export async function startJukebox(
   config: RuntimeConfig = {
     playbackDisabled: process.env.PLAYBACK_DISABLED === "1",
+    musickitDeveloperToken: process.env.MUSICKIT_DEVELOPER_TOKEN,
     environment: {
       MUSIC_PROVIDER: process.env.MUSIC_PROVIDER,
       MUSIC_PLAYBACK_MODE: process.env.MUSIC_PLAYBACK_MODE,

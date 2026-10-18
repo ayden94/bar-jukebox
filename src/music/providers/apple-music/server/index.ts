@@ -8,6 +8,9 @@ import { type AppleFetch, createAppleCatalog } from "./catalog";
 import { runAppleScript, type ScriptRunner } from "./native";
 import { createApplePlayback, type PollScheduler } from "./playback";
 
+export { getMusicKitDeveloperToken } from "./developer-token";
+export { createAppleMusicKitServer } from "./musickit";
+
 type AppleMusicServerOptions = {
   fetch?: AppleFetch;
   runScript?: ScriptRunner;

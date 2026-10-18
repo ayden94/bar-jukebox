@@ -36,6 +36,7 @@ export type MusicRuntimeState = {
 // 연결 변경은 조립에서 재생 조정 서비스에 위임해요. 저장소를 직접 바꾸지 않아요.
 export type MusicRuntimeAccessors = {
   readonly getState: () => MusicRuntimeState | Promise<MusicRuntimeState>;
+  readonly getDeveloperToken?: () => MusicResult<{ developerToken: string }>;
   readonly connectAuth?: (
     signal: AbortSignal,
   ) => Promise<MusicResult<AuthState>>;
@@ -161,6 +162,18 @@ export class MusicService {
 
   private actionBlocked(): boolean {
     return this.options.playbackDisabled || this.boot.issue !== null;
+  }
+
+  getDeveloperToken(): MusicResult<{ developerToken: string }> {
+    if (
+      this.actionBlocked() ||
+      this.boot.active?.providerId !== "apple-music" ||
+      this.boot.active.modeId !== "musickit" ||
+      !this.options.runtime.getDeveloperToken
+    ) {
+      return { ok: false, error: { code: "unsupported" } };
+    }
+    return this.options.runtime.getDeveloperToken();
   }
 
   async connectAuth(signal: AbortSignal): Promise<MusicResult<AuthState>> {

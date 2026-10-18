@@ -6,7 +6,10 @@ import type {
   ServerMusicProvider,
 } from "../music/contracts";
 import { appleMusicDescriptor } from "../music/providers/apple-music";
-import { createAppleMusicServer } from "../music/providers/apple-music/server";
+import {
+  createAppleMusicServer,
+  getMusicKitDeveloperToken,
+} from "../music/providers/apple-music/server";
 import { SseBroker } from "./events/sse-broker";
 import { MusicRepository } from "./music/music.repository";
 import { MusicService } from "./music/music.service";
@@ -32,6 +35,7 @@ export class JukeboxBusToken {}
 export type RuntimeConfig = {
   playbackDisabled: boolean;
   platform?: string;
+  musickitDeveloperToken?: string;
   environment?: { MUSIC_PROVIDER?: string; MUSIC_PLAYBACK_MODE?: string };
   music?: {
     descriptor: ProviderDescriptor;
@@ -46,6 +50,7 @@ export async function createJukeboxRuntime(
   connection: DatabaseConnection,
 ) {
   const signal = new AbortController().signal;
+  const musickitDeveloperToken = config.musickitDeveloperToken;
   const platform = config.platform ?? process.platform;
   const database = connection.database;
   const musicRepository = new MusicRepository(database);
@@ -204,6 +209,13 @@ export async function createJukeboxRuntime(
     registry,
     playbackDisabled: config.playbackDisabled,
     runtime: {
+      ...(boot.active?.providerId === "apple-music" &&
+      boot.active.modeId === "musickit"
+        ? {
+            getDeveloperToken: () =>
+              getMusicKitDeveloperToken(musickitDeveloperToken),
+          }
+        : {}),
       async getState() {
         const snapshot = await playbackService.snapshot();
         const owner =
@@ -223,7 +235,9 @@ export async function createJukeboxRuntime(
             : (connectionError ??
               (snapshot.ownerConnected
                 ? null
-                : "재생 기기가 선택되지 않았거나 연결을 확인할 수 없어요.")),
+                : auth?.action?.kind === "user-gesture"
+                  ? auth.action.label
+                  : "재생 기기가 선택되지 않았거나 연결을 확인할 수 없어요.")),
           auth,
           connectedTarget: snapshot.ownerConnected
             ? (owner?.connection ?? null)
