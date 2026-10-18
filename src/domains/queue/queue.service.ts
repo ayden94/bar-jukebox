@@ -1,5 +1,6 @@
 import type { TrackRef } from "../../music/contracts";
 import type {
+  BrowserStoppedFence,
   DurableAttempt,
   PlaybackFence,
   PlaybackReservation,
@@ -267,6 +268,37 @@ export class QueueService {
         finishedAt,
       );
       if (result === "done") {
+        this.history.unshift(song);
+        if (this.history.length > MAX_HISTORY) this.history.pop();
+      }
+      this.nowPlaying = null;
+      this.lastProgressSec = -1;
+      emit("mutate");
+      return true;
+    });
+  }
+
+  confirmBrowserStopped(
+    fence: BrowserStoppedFence,
+    finishedAt: number,
+  ): Promise<boolean> {
+    return this.mutate(async () => {
+      const current = this.nowPlaying;
+      if (
+        (current?.song.id ?? null) !== fence.songId ||
+        (current &&
+          current.status !== "waiting" &&
+          current.status !== "reconciliation-required")
+      )
+        return false;
+      const song = current?.song ?? null;
+      await this.repository.confirmBrowserStopped(
+        song,
+        fence,
+        MAX_HISTORY,
+        finishedAt,
+      );
+      if (song) {
         this.history.unshift(song);
         if (this.history.length > MAX_HISTORY) this.history.pop();
       }

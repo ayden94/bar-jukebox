@@ -1,10 +1,40 @@
 import { expect, test } from "bun:test";
 import {
+  parseBrowserStoppedFence,
   parseConnection,
   parseObservation,
   parseOutcome,
   parseReconciliation,
 } from "./dto";
+
+test("브라우저 정지 확인은 현재 소유권과 명시적인 nullable 시도·곡 쌍을 요구해요", () => {
+  const idle = {
+    ownerEpoch: 1,
+    executorSessionId: "browser",
+    attemptId: null,
+    songId: null,
+  };
+  expect(parseBrowserStoppedFence(idle)).toEqual(idle);
+  expect(
+    parseBrowserStoppedFence({ ...idle, attemptId: "a", songId: "s" }),
+  ).toEqual({ ...idle, attemptId: "a", songId: "s" });
+  for (const override of [
+    { ownerEpoch: 0 },
+    { ownerEpoch: -1 },
+    { ownerEpoch: 1.5 },
+    { ownerEpoch: Number.MAX_SAFE_INTEGER + 1 },
+    { ownerEpoch: "1" },
+    { executorSessionId: "" },
+    { attemptId: undefined },
+    { songId: undefined },
+    { attemptId: "" },
+    { songId: 1 },
+    { songId: "s" },
+    { attemptId: "a" },
+  ]) {
+    expect(() => parseBrowserStoppedFence({ ...idle, ...override })).toThrow();
+  }
+});
 
 const target = {
   providerId: "fixture",

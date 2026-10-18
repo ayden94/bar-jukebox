@@ -14,6 +14,7 @@ import { emit, onChange } from "../shared/bus";
 import type { Song } from "../shared/types";
 import type { PlaybackRepository } from "./playback.repository";
 import type {
+  BrowserStoppedFence,
   DurableAttempt,
   DurableCommand,
   OwnerClaim,
@@ -30,6 +31,7 @@ export type PlaybackServiceOptions = {
   stopConfirmationTimeoutMs?: number;
   heartbeatTimeoutMs?: number;
   now?: () => number;
+  scheduleLease?: (callback: () => void, delayMs: number) => () => void;
   onOwnerChange?: (owner: PlaybackOwner | null) => void;
   browserMode?: { providerId: string; modeId: string };
   serverMode?: { providerId: string; modeId: string };
@@ -44,6 +46,8 @@ export class PlaybackService {
   private commandChain: Promise<void> = Promise.resolve();
   private active: Attempt | null = null;
   private owner: PlaybackOwner | null = null;
+  private browserLease: PlaybackOwner | null = null;
+  private cancelLease: (() => void) | null = null;
   private transition = 0;
   private stopConfirmation: {
     attemptId: string;
@@ -98,7 +102,12 @@ export class PlaybackService {
         }
         await this.selectServerOwner();
         this.options.onOwnerChange?.(this.owner);
-        if (this.active && this.owner && !this.owner.released) {
+        if (
+          this.active &&
+          this.owner &&
+          !this.owner.released &&
+          this.owner.connection.location === "server"
+        ) {
           const commands = await this.repository.loadCommands(
             this.active.attemptId,
           );
@@ -128,6 +137,7 @@ export class PlaybackService {
     if (this.disposing) return this.disposing;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.clearBrowserLease();
     this.abort.abort();
     this.stopConfirmation?.completion.reject(this.abort.signal.reason);
     this.stopConfirmation = null;
@@ -154,8 +164,7 @@ export class PlaybackService {
         !owner.released &&
         (owner.connection.location === "server"
           ? serverConnected
-          : this.now() - owner.heartbeatAt <
-            (this.options.heartbeatTimeoutMs ?? 15000)),
+          : this.browserConnected(owner)),
       attempt,
       commands: commands.filter(
         (command) =>
@@ -200,6 +209,8 @@ export class PlaybackService {
       if (this.queue.hasProviderConflict())
         throw new Error("활성 신청의 음악 서비스가 달라요");
       this.owner = await this.repository.claim(claim, this.now());
+      if (this.owner.connection.location === "browser")
+        this.armBrowserLease(this.owner);
       this.options.onOwnerChange?.(this.owner);
       emit("mutate");
       this.wake();
@@ -209,7 +220,11 @@ export class PlaybackService {
 
   heartbeat(identity: OwnerIdentity): Promise<PlaybackOwner> {
     return this.command(async () => {
+      this.abort.signal.throwIfAborted();
+      if (this.browserLease) await this.expireBrowserLease(this.browserLease);
       this.owner = await this.repository.heartbeat(identity, this.now());
+      if (this.owner.connection.location === "browser")
+        this.armBrowserLease(this.owner);
       emit("mutate");
       return this.owner;
     });
@@ -229,6 +244,7 @@ export class PlaybackService {
       await this.finish(active);
     }
     this.owner = await this.repository.release(identity);
+    this.clearBrowserLease();
     this.options.onOwnerChange?.(this.owner);
     emit("mutate");
     return true;
@@ -429,6 +445,11 @@ export class PlaybackService {
   reconcile(identity: OwnerIdentity): Promise<boolean> {
     return this.command(async () => {
       if (!(await this.authorize(identity))) return false;
+      if (
+        this.owner?.connection.location === "browser" &&
+        !this.browserConnected(this.owner)
+      )
+        return false;
       return (await this.recover()) !== null;
     });
   }
@@ -454,6 +475,34 @@ export class PlaybackService {
   }
 
   // 운영자가 물리적으로 정지한 시도/세대만 완료해요.
+  confirmBrowserStopped(fence: BrowserStoppedFence): Promise<boolean> {
+    return this.command(async () => {
+      const owner = await this.repository.loadOwner();
+      const attempt = await this.repository.loadAttempt();
+      if (
+        this.abort.signal.aborted ||
+        !owner ||
+        owner.released ||
+        owner.connection.location !== "browser" ||
+        owner.ownerEpoch !== fence.ownerEpoch ||
+        owner.executorSessionId !== fence.executorSessionId ||
+        (attempt?.attemptId ?? null) !== fence.attemptId ||
+        (attempt?.songId ?? null) !== fence.songId
+      )
+        return false;
+      if (!(await this.queue.confirmBrowserStopped(fence, this.now())))
+        return false;
+      this.active = null;
+      this.transition += 1;
+      this.owner = await this.repository.loadOwner();
+      this.clearBrowserLease();
+      this.options.onOwnerChange?.(this.owner);
+      emit("mutate");
+      return true;
+    });
+  }
+
+  // AppleScript의 기존 복원 확인은 다음 서버 곡을 이어서 재생해요.
   confirmStopped(
     expectedSongId: string,
     expected?: { attemptId: string | null; ownerEpoch: number },
@@ -466,6 +515,7 @@ export class PlaybackService {
       const owner = await this.repository.loadOwner();
       if (
         this.abort.signal.aborted ||
+        owner?.connection.location === "browser" ||
         !current ||
         current.song.id !== expectedSongId ||
         this.transition !== transition ||
@@ -571,6 +621,8 @@ export class PlaybackService {
         !active ||
         !this.owner ||
         this.owner.released ||
+        (this.owner.connection.location === "browser" &&
+          !this.browserConnected(this.owner)) ||
         active.ownerEpoch !== this.owner.ownerEpoch
       ) {
         throw new Error("현재 재생을 확인한 뒤 다시 시도해 주세요");
@@ -653,8 +705,7 @@ export class PlaybackService {
       // 연락 두절은 정지 증거가 아니며, 새 명령도 자동 전송하지 않아요.
       if (
         this.owner.connection.location === "browser" &&
-        this.now() - this.owner.heartbeatAt >=
-          (this.options.heartbeatTimeoutMs ?? 15000)
+        !this.browserConnected(this.owner)
       )
         return;
       let reservation: PlaybackReservation | undefined;
@@ -824,6 +875,8 @@ export class PlaybackService {
       !this.abort.signal.aborted &&
       this.owner !== null &&
       !this.owner.released &&
+      (this.owner.connection.location !== "browser" ||
+        this.browserConnected(this.owner)) &&
       identity.ownerEpoch === this.owner.ownerEpoch &&
       identity.executorSessionId === this.owner.executorSessionId &&
       active.ownerEpoch === identity.ownerEpoch &&
@@ -892,6 +945,7 @@ export class PlaybackService {
   ): Promise<boolean> {
     if (
       !this.matches(observation, active) ||
+      !this.matchesIdentity(this.fence(active), active) ||
       !(await this.authorize(this.fence(active), active.attemptId))
     )
       return false;
@@ -995,6 +1049,70 @@ export class PlaybackService {
       );
       this.options.onOwnerChange?.(this.owner);
     }
+  }
+
+  private browserConnected(owner: PlaybackOwner): boolean {
+    return (
+      !this.abort.signal.aborted &&
+      this.browserLease !== null &&
+      this.browserLease.ownerEpoch === owner.ownerEpoch &&
+      this.browserLease.executorSessionId === owner.executorSessionId &&
+      this.browserLease.heartbeatAt === owner.heartbeatAt &&
+      this.now() - owner.heartbeatAt <
+        (this.options.heartbeatTimeoutMs ?? 15000)
+    );
+  }
+
+  private clearBrowserLease(): void {
+    this.cancelLease?.();
+    this.cancelLease = null;
+    this.browserLease = null;
+  }
+
+  private armBrowserLease(owner: PlaybackOwner): void {
+    this.clearBrowserLease();
+    if (this.abort.signal.aborted) return;
+    this.browserLease = owner;
+    const expired = () => {
+      void this.command(() => this.expireBrowserLease(owner)).catch(
+        (error: unknown) => this.ended.reject(error),
+      );
+    };
+    const delay = Math.max(
+      0,
+      owner.heartbeatAt +
+        (this.options.heartbeatTimeoutMs ?? 15000) -
+        this.now(),
+    );
+    if (this.options.scheduleLease) {
+      this.cancelLease = this.options.scheduleLease(expired, delay);
+    } else {
+      const timer = setTimeout(expired, delay);
+      this.cancelLease = () => clearTimeout(timer);
+    }
+  }
+
+  private async expireBrowserLease(expected: PlaybackOwner): Promise<void> {
+    if (
+      this.abort.signal.aborted ||
+      this.browserLease !== expected ||
+      this.browserConnected(expected)
+    )
+      return;
+    const owner = await this.repository.loadOwner();
+    if (
+      !owner ||
+      owner.released ||
+      owner.ownerEpoch !== expected.ownerEpoch ||
+      owner.executorSessionId !== expected.executorSessionId ||
+      owner.heartbeatAt !== expected.heartbeatAt
+    )
+      return;
+    this.clearBrowserLease();
+    if (this.active)
+      await this.setStatus(this.active, "reconciliation-required");
+    // lease 만료는 정지나 해제의 증거가 아니에요.
+    emit("mutate");
   }
 
   private command<T>(task: () => Promise<T>): Promise<T> {

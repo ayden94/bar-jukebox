@@ -17,11 +17,13 @@ import { onChange } from "../shared/bus";
 import { BrowserPlaybackBridge } from "./browser-playback-bridge";
 import {
   ClaimOwnerDto,
+  ConfirmBrowserStoppedDto,
   OwnerIdentityDto,
   PlaybackEventsDto,
   PlaybackObservationDto,
   PlaybackReceiptDto,
   PlaybackReconciliationDto,
+  parseBrowserStoppedFence,
   parseConnection,
   parseObservation,
   parseOutcome,
@@ -121,6 +123,15 @@ export class PlaybackController {
     const outcome = parseOutcome(dto.outcome);
     requireCurrent(await this.playback.receipt(dto, outcome));
     requireCurrent(this.bridge.acceptReceipt(dto, outcome));
+    return { ok: true };
+  }
+
+  @Post("/confirm-browser-stopped")
+  @RequestDto(ConfirmBrowserStoppedDto)
+  async confirmBrowserStopped(dto: ConfirmBrowserStoppedDto) {
+    requireCurrent(
+      await this.playback.confirmBrowserStopped(parseBrowserStoppedFence(dto)),
+    );
     return { ok: true };
   }
 
