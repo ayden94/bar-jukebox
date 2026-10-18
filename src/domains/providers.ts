@@ -5,13 +5,18 @@ import type {
   ProviderDescriptor,
   ServerMusicProvider,
 } from "../music/contracts";
-import { appleMusicDescriptor } from "../music/providers/apple-music";
-import { createAppleMusicServer } from "../music/providers/apple-music/server";
+import {
+  loadMusicServer,
+  musicDescriptors,
+  requiredPlaybackCapabilities,
+  validateMusicProvider,
+} from "../music/registry";
 import { SseBroker } from "./events/sse-broker";
 import { MusicRepository } from "./music/music.repository";
 import { MusicService } from "./music/music.service";
 import {
   type MusicRegistration,
+  registerMusicDescriptors,
   resolveMusicBootConfig,
 } from "./music/music-config";
 import { BrowserPlaybackBridge } from "./playback/browser-playback-bridge";
@@ -49,35 +54,33 @@ export async function createJukeboxRuntime(
   const platform = config.platform ?? process.platform;
   const database = connection.database;
   const musicRepository = new MusicRepository(database);
-  const descriptor = config.music?.descriptor ?? appleMusicDescriptor;
-  if (
-    config.music &&
-    descriptor.providerId !== config.music.provider.identity.providerId
-  ) {
-    await config.music.provider.dispose();
-    throw new Error("등록한 음악 서비스와 실행 방식이 일치하지 않아요");
+  if (config.music) {
+    await validateMusicProvider(
+      config.music.descriptor,
+      config.music.provider.identity,
+      config.music.provider,
+    );
   }
-  const registry: MusicRegistration[] = [
-    {
-      descriptor,
-      modes: descriptor.modes.map((mode) => ({
-        modeId: mode.modeId,
-        displayName: config.music ? mode.modeId : "이 Mac의 Music 앱",
-        available: config.music !== undefined || platform === "darwin",
-        unavailableReason:
-          config.music !== undefined || platform === "darwin"
-            ? null
-            : "이 재생 방식은 macOS의 Music 앱이 필요해요.",
-      })),
-    },
-  ];
+  const registry: readonly MusicRegistration[] = config.music
+    ? [
+        {
+          descriptor: config.music.descriptor,
+          modes: config.music.descriptor.modes.map((mode) => ({
+            modeId: mode.modeId,
+            displayName: mode.modeId,
+            available: true,
+            unavailableReason: null,
+          })),
+        },
+      ]
+    : registerMusicDescriptors(musicDescriptors, platform);
   const boot = resolveMusicBootConfig({
     environment: config.environment ?? {},
     saved: await musicRepository.load(),
     legacyDefault: config.music
       ? config.music.provider.identity
       : platform === "darwin"
-        ? { providerId: appleMusicDescriptor.providerId, modeId: "applescript" }
+        ? { providerId: "apple-music", modeId: "applescript" }
         : null,
     registry,
   });
@@ -85,11 +88,12 @@ export async function createJukeboxRuntime(
     | (ServerMusicProvider & { readonly artwork: ArtworkPort })
     | null = null;
   let connectionError: string | null = null;
-  if (!boot.issue) {
+  if (!boot.issue && boot.active) {
     if (config.music) {
       provider = config.music.provider;
     } else {
-      const created = await createAppleMusicServer(
+      const created = await loadMusicServer(
+        boot.active,
         { disabled: config.playbackDisabled, platform },
         signal,
       );
@@ -97,34 +101,22 @@ export async function createJukeboxRuntime(
       else
         connectionError = `음악 서비스를 시작할 수 없어요 (${created.error.code})`;
     }
-  }
-  const mode = descriptor.modes.find(
-    (entry) => entry.modeId === boot.active?.modeId,
-  );
-  const required = [
-    "canPlayExactTrack",
-    "canPause",
-    "canResume",
-    "canStop",
-    "canRestart",
-    "canObserveEnd",
-  ] as const;
-  if (
-    provider &&
-    (descriptor.providerId !== provider.identity.providerId ||
-      boot.active?.providerId !== provider.identity.providerId ||
-      boot.active.modeId !== provider.identity.modeId ||
-      !mode ||
-      mode.location !== provider.execution.location ||
-      required.some((key) => !mode.capabilities[key]))
-  ) {
-    await provider.dispose();
-    throw new Error("등록한 음악 서비스와 실행 방식이 일치하지 않아요");
+    if (provider) {
+      await validateMusicProvider(
+        registry.find(
+          (entry) => entry.descriptor.providerId === boot.active?.providerId,
+        )!.descriptor,
+        boot.active,
+        provider,
+      );
+    }
+  } else if (config.music) {
+    await config.music.provider.dispose();
   }
   const queueRepository = new DrizzleQueueRepository(database);
   const queueService = new QueueService(
     queueRepository,
-    provider?.identity.providerId ?? null,
+    boot.issue ? null : (boot.active?.providerId ?? null),
   );
   const settingsRepository = new SettingsRepository(database);
   const settingsService = new SettingsService(settingsRepository);
@@ -172,7 +164,9 @@ export async function createJukeboxRuntime(
           result.value.target.modeId === provider.identity.modeId &&
           result.value.target.targetId === target.ref.targetId &&
           result.value.location === "server" &&
-          required.every((key) => result.value.capabilities[key])
+          requiredPlaybackCapabilities.every(
+            (key) => result.value.capabilities[key],
+          )
         )
           connected = result.value;
         else

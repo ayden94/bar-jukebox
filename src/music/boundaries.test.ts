@@ -143,6 +143,7 @@ function checkBoundaries(graph: ModuleGraph): readonly Violation[] {
       if (
         toProvider &&
         !fromProvider &&
+        file !== "src/music/registry.ts" &&
         file !== "src/domains/providers.ts" &&
         file !== "src/pages/admin/music-registry.ts"
       ) {
@@ -168,6 +169,34 @@ function checkBoundaries(graph: ModuleGraph): readonly Violation[] {
   }
 
   for (const file of graph.keys()) {
+    if (file === "src/music/registry.ts") {
+      const ast = parse(graph.get(file)!, {
+        sourceType: "module",
+        plugins: ["typescript"],
+      });
+      for (const statement of ast.program.body) {
+        if (
+          statement.type === "ImportDeclaration" ||
+          statement.type === "ExportNamedDeclaration" ||
+          statement.type === "ExportAllDeclaration"
+        ) {
+          const specifier = literal(statement.source);
+          if (!specifier) continue;
+          const dependency = resolveDependency(file, specifier, graph);
+          if (
+            /^src\/music\/providers\/[^/]+\/(?:server|browser)\//.test(
+              dependency,
+            )
+          ) {
+            violations.push({
+              file,
+              dependency,
+              rule: "registry-eager-implementation",
+            });
+          }
+        }
+      }
+    }
     const isCore =
       /^src\/domains\/(?:queue|search|playback)\/.*\.service\.ts$/.test(file);
     const isBrowser =
@@ -442,3 +471,41 @@ test("모듈 경계: 제품 조립에 테스트 공급자 배럴이 유입되지
     rule: "production-testing-import",
   });
 });
+
+test("등록 경계: 순수 descriptor와 선택 함수 안의 정적 loader만 허용해요", () => {
+  const graph = new Map([
+    [
+      "src/music/registry.ts",
+      'import { descriptor } from "./providers/example"; export const load = () => import("./providers/example/server");',
+    ],
+    [
+      "src/music/providers/example/index.ts",
+      'export const descriptor = { providerId: "example", modes: [] };',
+    ],
+    ["src/music/providers/example/server/index.ts", "export {};"],
+  ]);
+
+  expect(checkBoundaries(graph)).toEqual([]);
+});
+
+test.each([
+  'import { create } from "./providers/example/server";',
+  'export { create } from "./providers/example/server";',
+])(
+  "등록 경계: 실행 구현의 즉시 import 또는 재수출은 거절해요 (%s)",
+  (source) => {
+    const graph = new Map([
+      ["src/music/registry.ts", source],
+      [
+        "src/music/providers/example/server/index.ts",
+        "export const create = () => 1;",
+      ],
+    ]);
+
+    expect(checkBoundaries(graph)).toContainEqual({
+      file: "src/music/registry.ts",
+      dependency: "src/music/providers/example/server/index.ts",
+      rule: "registry-eager-implementation",
+    });
+  },
+);
