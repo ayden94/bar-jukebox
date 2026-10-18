@@ -11,7 +11,8 @@ import {
 import { AppDocument } from "../app-document";
 import { AdminMusicPage } from "./index";
 import MusicPage from "./music-page";
-import { MusicConnectionPanel, MusicSettingsPanel } from "./music-panel";
+import { MusicConnectionPanel } from "./music-panel";
+import { MusicSettingsPanel } from "./music-settings-panel";
 import type { MusicSnapshot } from "./music-types";
 
 async function snapshot(): Promise<MusicSnapshot> {
