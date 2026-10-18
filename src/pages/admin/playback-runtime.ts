@@ -1,3 +1,4 @@
+import type { BrowserCatalogRequest } from "../../domains/music/browser-catalog-protocol";
 import type { BrowserPlaybackMessage } from "../../domains/playback/browser-playback-bridge";
 import type {
   PlaybackOwner,
@@ -15,6 +16,7 @@ import { type PlaybackFetcher, playbackEvents } from "./playback-channel";
 
 export type BrowserPlaybackSnapshot = PlaybackSnapshot & {
   messages: BrowserPlaybackMessage[];
+  catalogRequests: BrowserCatalogRequest[];
 };
 
 type RuntimeOptions = {
@@ -23,6 +25,8 @@ type RuntimeOptions = {
   connection: ConnectedTarget;
   fetcher?: PlaybackFetcher;
   onSnapshot?: (snapshot: BrowserPlaybackSnapshot) => void;
+  onCatalogSnapshot?: (snapshot: BrowserPlaybackSnapshot) => void;
+  onCatalogDisconnect?: () => void;
   onDisconnected?: (error: unknown) => void;
 };
 
@@ -121,6 +125,7 @@ export class BrowserPlaybackExecutor {
           throw new Error("재생 스냅샷 형식이 올바르지 않아요");
         }
         this.options.onSnapshot?.(snapshot);
+        this.options.onCatalogSnapshot?.(snapshot);
         if (
           this.releasing &&
           snapshot.owner?.ownerEpoch === this.owner?.ownerEpoch &&
@@ -325,6 +330,7 @@ export class BrowserPlaybackExecutor {
   dispose(): Promise<void> {
     if (this.disposed) return this.disposed;
     this.accepting = false;
+    this.options.onCatalogDisconnect?.();
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.abort.abort();
     this.disposed = (async () => {

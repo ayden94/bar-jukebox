@@ -1,9 +1,11 @@
 import type {
   BrowserMusicProvider,
+  CatalogPort,
   MusicResult,
   ProviderDescriptor,
   ProviderIdentity,
 } from "../../music/contracts";
+import { BrowserCatalogExecutor } from "./browser-catalog-executor";
 import type {
   BrowserMusicOptions,
   SelectedBrowserFactory,
@@ -36,7 +38,7 @@ export type BrowserHostState = {
   readonly error: string;
 };
 
-type HostOptions = BrowserMusicOptions & {
+type HostOptions = Omit<BrowserMusicOptions, "registerCatalog"> & {
   readonly token: string;
   readonly fetcher?: PlaybackFetcher;
   readonly loadFactory: (
@@ -62,6 +64,9 @@ export class BrowserMusicLifecycle {
   private selected: ProviderIdentity | null = null;
   private provider: BrowserMusicProvider | null = null;
   private executor: BrowserPlaybackExecutor | null = null;
+  private catalog: BrowserCatalogExecutor | null = null;
+  private registration: { port: CatalogPort } | null = null;
+  private registrationGeneration = 0;
   private connecting: Promise<void> | null = null;
   private disconnecting: Promise<void> | null = null;
   private abandoning: Promise<void> | null = null;
@@ -118,13 +123,35 @@ export class BrowserMusicLifecycle {
     signal: AbortSignal,
   ) {
     let claiming = false;
+    const generation = ++this.registrationGeneration;
     try {
       this.update("loading");
       const loaded = await this.options.loadFactory(selected, signal);
       signal.throwIfAborted();
       failure(loaded);
       if (!loaded.ok) return;
-      const created = await loaded.value({ api: this.options.api }, signal);
+      const created = await loaded.value(
+        {
+          api: this.options.api,
+          registerCatalog: (port) => {
+            if (
+              signal.aborted ||
+              this.closed ||
+              generation !== this.registrationGeneration
+            )
+              return () => {};
+            const registration = { port };
+            this.registration = registration;
+            this.catalog?.setPort(port);
+            return () => {
+              if (this.registration !== registration) return;
+              this.registration = null;
+              this.catalog?.setPort(null);
+            };
+          },
+        },
+        signal,
+      );
       if (created.ok) this.provider = created.value;
       signal.throwIfAborted();
       failure(created);
@@ -190,6 +217,8 @@ export class BrowserMusicLifecycle {
         fetcher: this.options.fetcher,
         playback: provider.runtime.playback,
         connection,
+        onCatalogSnapshot: (snapshot) => this.catalog?.update(snapshot),
+        onCatalogDisconnect: () => this.catalog?.dispose(),
         onDisconnected: () => {
           this.update(
             "unknown",
@@ -198,6 +227,12 @@ export class BrowserMusicLifecycle {
         },
       });
       this.executor = executor;
+      this.catalog = new BrowserCatalogExecutor({
+        connection,
+        executorSessionId: executor.executorSessionId,
+        api: this.options.api,
+      });
+      this.catalog.setPort(this.registration?.port ?? null);
       await executor.start();
       signal.throwIfAborted();
       if (this.state.phase === "claiming") this.update("connected");
@@ -244,6 +279,10 @@ export class BrowserMusicLifecycle {
   }
 
   private async disposeResources() {
+    this.registrationGeneration++;
+    this.catalog?.dispose();
+    this.catalog = null;
+    this.registration = null;
     const executor = this.executor;
     const provider = this.provider;
     this.executor = null;

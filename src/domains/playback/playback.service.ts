@@ -33,6 +33,7 @@ export type PlaybackServiceOptions = {
   now?: () => number;
   scheduleLease?: (callback: () => void, delayMs: number) => () => void;
   onOwnerChange?: (owner: PlaybackOwner | null) => void;
+  onBrowserConnectionChange?: (owner: PlaybackOwner | null) => void;
   browserMode?: { providerId: string; modeId: string };
   serverMode?: { providerId: string; modeId: string };
   serverConnection?: ConnectionPort;
@@ -1067,12 +1068,15 @@ export class PlaybackService {
     this.cancelLease?.();
     this.cancelLease = null;
     this.browserLease = null;
+    this.options.onBrowserConnectionChange?.(null);
   }
 
   private armBrowserLease(owner: PlaybackOwner): void {
-    this.clearBrowserLease();
+    this.cancelLease?.();
+    this.cancelLease = null;
     if (this.abort.signal.aborted) return;
     this.browserLease = owner;
+    this.options.onBrowserConnectionChange?.(owner);
     const expired = () => {
       void this.command(() => this.expireBrowserLease(owner)).catch(
         (error: unknown) => this.ended.reject(error),

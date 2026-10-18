@@ -26,7 +26,7 @@ test("음악 등록: 세 조합은 인증이나 외부 앱 없이 조회해요",
 });
 
 test.each([{ providerId: "youtube-music", modeId: "browser-companion" }])(
-  "선택 loader: 미구현 $providerId/$modeId 조합은 준비 성공을 만들지 않아요",
+  "선택 loader: $providerId/$modeId는 주입된 transport 없이 준비 성공을 만들지 않아요",
   async (selected) => {
     const result = await loadMusicServer(
       selected,
@@ -34,7 +34,7 @@ test.each([{ providerId: "youtube-music", modeId: "browser-companion" }])(
       new AbortController().signal,
     );
 
-    expect(result).toEqual({ ok: false, error: { code: "unsupported" } });
+    expect(result).toEqual({ ok: false, error: { code: "configuration" } });
   },
 );
 

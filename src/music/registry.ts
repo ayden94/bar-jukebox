@@ -1,6 +1,7 @@
 import type {
   ArtworkPort,
   BrowserMusicProvider,
+  CatalogPort,
   MusicResult,
   ProviderDescriptor,
   ProviderIdentity,
@@ -27,6 +28,7 @@ export type MusicServerOptions = {
   readonly disabled: boolean;
   readonly platform: string;
   readonly musickitDeveloperToken?: string;
+  readonly catalogTransport?: CatalogPort;
 };
 
 // 구현이 없는 조합도 등록은 유지해요. 선택된 공개 factory만 불러와요.
@@ -63,7 +65,16 @@ export async function loadMusicServer(
     selected.providerId === "youtube-music" &&
     selected.modeId === "browser-companion"
   ) {
-    return { ok: false, error: { code: "unsupported" } };
+    if (!options.catalogTransport)
+      return { ok: false, error: { code: "configuration" } };
+    const { createYouTubeMusicServer } = await import(
+      "./providers/youtube-music/server"
+    );
+    signal.throwIfAborted();
+    return createYouTubeMusicServer(
+      { transport: options.catalogTransport },
+      signal,
+    );
   }
   return { ok: false, error: { code: "configuration" } };
 }

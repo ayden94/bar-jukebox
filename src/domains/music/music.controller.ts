@@ -11,7 +11,8 @@ import {
 } from "@fluojs/http";
 import type { MusicResult } from "../../music/contracts";
 import { AdminTokenGuard } from "../admin/admin-token.guard";
-import { MusicConfigDto, MusicTargetDto } from "./dto";
+import { BrowserCatalogBridge } from "./browser-catalog-bridge";
+import { MusicCatalogResultDto, MusicConfigDto, MusicTargetDto } from "./dto";
 import { MusicConfigurationError, MusicService } from "./music.service";
 
 class MusicDeveloperTokenDto {}
@@ -25,11 +26,24 @@ function requireResult<T>(result: MusicResult<T>): T {
   return result.value;
 }
 
-@Inject(MusicService)
+@Inject(MusicService, BrowserCatalogBridge)
 @UseGuards(AdminTokenGuard)
 @Controller("/api/admin/music")
 export class MusicController {
-  constructor(private readonly music: MusicService) {}
+  constructor(
+    private readonly music: MusicService,
+    private readonly catalog: BrowserCatalogBridge,
+  ) {}
+
+  @Post("/catalog-result")
+  @RequestDto(MusicCatalogResultDto)
+  catalogResult(dto: MusicCatalogResultDto) {
+    if (!this.catalog.acceptResult(dto, dto.result))
+      throw new ConflictException(
+        "현재 카탈로그 요청과 응답이 일치하지 않아요",
+      );
+    return { ok: true };
+  }
 
   @Get("/")
   async snapshot() {

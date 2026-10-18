@@ -13,6 +13,7 @@ import {
 } from "@fluojs/http";
 import { AdminTokenGuard } from "../admin/admin-token.guard";
 import { SseBroker } from "../events/sse-broker";
+import { BrowserCatalogBridge } from "../music/browser-catalog-bridge";
 import { onChange } from "../shared/bus";
 import { BrowserPlaybackBridge } from "./browser-playback-bridge";
 import {
@@ -36,13 +37,14 @@ function requireCurrent(accepted: boolean): void {
     throw new ConflictException("현재 재생 실행기와 일치하지 않아요");
 }
 
-@Inject(PlaybackService, BrowserPlaybackBridge)
+@Inject(PlaybackService, BrowserPlaybackBridge, BrowserCatalogBridge)
 @UseGuards(AdminTokenGuard)
 @Controller("/api/admin/playback")
 export class PlaybackController {
   constructor(
     private readonly playback: PlaybackService,
     private readonly bridge: BrowserPlaybackBridge,
+    private readonly catalog: BrowserCatalogBridge,
   ) {}
 
   @Get("/snapshot")
@@ -63,6 +65,8 @@ export class PlaybackController {
     const broker = new SseBroker();
     const offState = onChange(() => broker.notify());
     const offBridge = this.bridge.subscribe(() => broker.notify());
+    const offCatalog = this.catalog.subscribe(() => broker.notify());
+    const offCatalogChannel = this.catalog.openChannel(dto.executorSessionId);
     context.response.setHeader("Cache-Control", "private, no-store");
     try {
       while (!signal.aborted) {
@@ -73,6 +77,9 @@ export class PlaybackController {
           event: "snapshot",
           data: {
             ...snapshot,
+            catalogRequests: snapshot.ownerConnected
+              ? this.catalog.requests(dto.executorSessionId)
+              : [],
             messages:
               snapshot.owner?.executorSessionId === dto.executorSessionId &&
               !snapshot.owner.released
@@ -88,6 +95,8 @@ export class PlaybackController {
       lifetime.abort();
       offState();
       offBridge();
+      offCatalog();
+      offCatalogChannel();
     }
   }
 

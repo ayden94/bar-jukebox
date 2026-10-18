@@ -25,6 +25,7 @@ import { AdminTokenGuard } from "./domains/admin/admin-token.guard";
 import { AdminPageDto } from "./domains/admin/dto";
 import { EventsController } from "./domains/events/events.controller";
 import { SseBroker } from "./domains/events/sse-broker";
+import { BrowserCatalogBridge } from "./domains/music/browser-catalog-bridge";
 import { MusicController } from "./domains/music/music.controller";
 import { MusicService } from "./domains/music/music.service";
 import { BrowserPlaybackBridge } from "./domains/playback/browser-playback-bridge";
@@ -296,6 +297,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       SearchService,
       PlaybackService,
       BrowserPlaybackBridge,
+      BrowserCatalogBridge,
       MusicService,
       SseBroker,
       JukeboxBusToken,

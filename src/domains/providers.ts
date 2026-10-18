@@ -13,6 +13,7 @@ import {
   validateMusicProvider,
 } from "../music/registry";
 import { SseBroker } from "./events/sse-broker";
+import { BrowserCatalogBridge } from "./music/browser-catalog-bridge";
 import { MusicRepository } from "./music/music.repository";
 import { MusicService } from "./music/music.service";
 import {
@@ -53,6 +54,7 @@ export async function createJukeboxRuntime(
   connection: DatabaseConnection,
 ) {
   const signal = new AbortController().signal;
+  const catalogBridge = new BrowserCatalogBridge();
   const musickitDeveloperToken = config.musickitDeveloperToken;
   const platform = config.platform ?? process.platform;
   const database = connection.database;
@@ -101,6 +103,7 @@ export async function createJukeboxRuntime(
           disabled: config.playbackDisabled,
           platform,
           musickitDeveloperToken,
+          catalogTransport: catalogBridge,
         },
         signal,
       );
@@ -191,6 +194,7 @@ export async function createJukeboxRuntime(
     playbackRepository,
     {
       onOwnerChange: (owner) => bridge.bindOwner(owner),
+      onBrowserConnectionChange: (owner) => catalogBridge.bindOwner(owner),
       ...(provider && server && !config.playbackDisabled
         ? { serverMode: provider.identity, serverConnection: server.connection }
         : {}),
@@ -293,6 +297,7 @@ export async function createJukeboxRuntime(
     { provide: SearchService, useValue: searchService },
     { provide: PlaybackService, useValue: playbackService },
     { provide: BrowserPlaybackBridge, useValue: bridge },
+    { provide: BrowserCatalogBridge, useValue: catalogBridge },
     { provide: MusicService, useValue: musicService },
     { provide: SseBroker, useValue: sseBroker },
     { provide: JukeboxBusToken, useValue: { onChange, emit } },
@@ -308,7 +313,9 @@ export async function createJukeboxRuntime(
     playbackRepository,
     musicService,
     bridge,
+    catalogBridge,
     async dispose() {
+      catalogBridge.dispose();
       try {
         await playbackService.dispose();
         await bridge.dispose();

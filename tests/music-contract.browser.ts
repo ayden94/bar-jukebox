@@ -7,6 +7,34 @@ import {
 } from "./support/browser-lifecycle";
 import { createIsolatedServer } from "./support/isolated-server";
 
+const supported = [
+  "public-contract",
+  "browser-catalog",
+  "stale-catalog",
+  "catalog-capacity-fence",
+] as const;
+const args = process.argv.slice(2);
+if (
+  args.length !== 0 &&
+  (args.length !== 2 ||
+    args[0] !== "--scenario" ||
+    !supported.some((scenario) => scenario === args[1]))
+)
+  throw new Error(`알 수 없는 scenario: ${args.join(" ")}`);
+const scenarios = args.length
+  ? supported.filter((scenario) => scenario === args[1])
+  : supported;
+const catalogScenarios = scenarios.filter(
+  (scenario) => scenario !== "public-contract",
+);
+if (catalogScenarios.length) {
+  const { runCatalogScenarios } = await import(
+    "./support/catalog-browser-scenarios"
+  );
+  await runCatalogScenarios(catalogScenarios);
+}
+if (!scenarios.includes("public-contract")) process.exit(0);
+
 const cursor = "opaque/+?cursor=한글&next";
 const hits: TrackMetadata[] = ["one", "two", "three"].map((providerId) => ({
   ref: { providerId, trackId: "shared/id?&" },
@@ -157,3 +185,4 @@ assert.deepEqual(await browser.evaluate("window.__lifecycle.failures"), []);
 console.info(
   "제공자별 트랙·커서 검색·커버 프록시·관리자/게스트 요청 계약 검증 통과",
 );
+console.info(JSON.stringify({ scenario: "public-contract", result: "PASS" }));
