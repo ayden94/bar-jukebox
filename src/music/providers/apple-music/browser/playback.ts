@@ -20,6 +20,7 @@ import {
 import {
   abortable,
   type MusicKitInstance,
+  type MusicKitItem,
   type MusicKitSDK,
   record,
 } from "./sdk";
@@ -35,6 +36,7 @@ export class MusicKitPlayback implements PlaybackPort {
   private pendingState: unknown = null;
   private executorSessionId: string | null = null;
   private readonly commands = new Set<string>();
+  private readonly usedItems = new WeakSet<MusicKitItem>();
   private uncertain = false;
   private operation: Promise<void> = Promise.resolve();
   private readonly lifetime = new AbortController();
@@ -66,8 +68,17 @@ export class MusicKitPlayback implements PlaybackPort {
         },
       ],
     ];
-    for (const [name, listener] of this.listeners)
-      music.addEventListener(name, listener);
+    let attempted = 0;
+    try {
+      for (const [name, listener] of this.listeners) {
+        attempted++;
+        music.addEventListener(name, listener);
+      }
+    } catch (error) {
+      for (const [name, listener] of this.listeners.slice(0, attempted))
+        music.removeEventListener(name, listener);
+      throw error;
+    }
   }
 
   connect(connection: ConnectedTarget) {
@@ -116,6 +127,7 @@ export class MusicKitPlayback implements PlaybackPort {
     if (this.disposed || !this.connected || !this.music.isAuthorized)
       return "unavailable";
     if (this.uncertain) return "unknown";
+    if (this.owned && !ownsQueue(this.music, this.owned)) return "unknown";
     if (
       this.owned &&
       ownsQueue(this.music, this.owned) &&
@@ -145,6 +157,10 @@ export class MusicKitPlayback implements PlaybackPort {
 
   private sample() {
     if (this.disposed || this.busy) return;
+    if (this.owned && !ownsQueue(this.music, this.owned)) {
+      this.invalidate("unknown");
+      return;
+    }
     // SDK는 terminal 상태 이벤트 직전에 nowPlayingItem을 비워요.
     // 이 과도 상태를 곡 교체나 침묵으로 확정하지 않고 item을 담은 이벤트를 기다려요.
     if (
@@ -243,7 +259,8 @@ export class MusicKitPlayback implements PlaybackPort {
       native.version !== 1 ||
       this.busy ||
       this.uncertain ||
-      !this.connected
+      !this.connected ||
+      !ownsQueue(this.music, owned)
     )
       return { ok: true, value: { status: "unknown" } };
     const expected = binding(owned).payload;
@@ -381,7 +398,6 @@ export class MusicKitPlayback implements PlaybackPort {
             ? command.trackRef.trackId
             : this.owned?.trackId;
         if (!trackId) throw new Error("현재 곡을 확인하지 못했어요.");
-        const previous = this.owned?.item;
         this.owned = null;
         this.music.repeatMode = this.sdk.PlayerRepeatMode.none;
         this.music.shuffleMode = this.sdk.PlayerShuffleMode.off;
@@ -395,13 +411,17 @@ export class MusicKitPlayback implements PlaybackPort {
         const item = queue?.items[0];
         if (
           !item ||
+          queue !== this.music.queue ||
           queue.items.length !== 1 ||
           item.id !== trackId ||
-          item === previous
+          this.usedItems.has(item)
         )
           throw new Error("정확한 새 재생 occurrence를 확인하지 못했어요.");
+        // 상태 이벤트에는 queue/attempt가 없으므로 과거 item을 새 명령에 붙일 수 없어요.
+        this.usedItems.add(item);
         this.owned = {
           id: crypto.randomUUID(),
+          queue,
           item,
           trackId,
           context: command.context,

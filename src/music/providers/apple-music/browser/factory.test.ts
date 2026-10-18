@@ -229,3 +229,27 @@ test("정리: 진행 중 인증의 늦은 완료는 disposed 상태를 되돌리
   expect(sdk.isAuthorized).toBe(false);
   expect(sdk.listenerCount).toBe(0);
 });
+
+test.each([false, true])(
+  "factory: 세 번째 리스너 등록 완료 %s 후 실패도 리스너를 모두 회수해요",
+  async (registeredBeforeThrow) => {
+    const sdk = new MusicKitFixture();
+    const add = sdk.addEventListener.bind(sdk);
+    let registrations = 0;
+    sdk.addEventListener = (name, listener) => {
+      registrations++;
+      if (registrations !== 3 || registeredBeforeThrow) add(name, listener);
+      if (registrations === 3) throw new Error("SIMULATED listener failure");
+    };
+
+    const result = await createMusicKitProvider(
+      { api: async () => Response.json({ developerToken: "fixture" }) },
+      signal,
+      async () => sdk.sdk,
+    );
+
+    expect(result).toEqual({ ok: false, error: { code: "configuration" } });
+    expect(registrations).toBe(3);
+    expect(sdk.listenerCount).toBe(0);
+  },
+);

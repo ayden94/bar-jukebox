@@ -194,3 +194,69 @@ test("실패: DRM preview 전환과 SDK 예외는 성공 완료가 아니에요"
   );
   expect(f.sdk.calls).toContain("stop");
 });
+
+test("재시작: A-B-A item 재사용의 오래된 종료는 새 attempt를 완료하지 않아요", async () => {
+  const f = await setup();
+  await f.play();
+  const original = f.sdk.nowPlayingItem;
+  if (!original) throw new Error("첫 item이 필요해요.");
+  const second = await f.playback.execute(
+    {
+      type: "restart",
+      initialState: "playing",
+      context: { ...f.context, commandId: "restart-2", attemptId: "attempt-2" },
+    },
+    signal,
+  );
+  expect(second.status).toBe("accepted");
+  expect(f.sdk.nowPlayingItem).not.toBe(original);
+  const setQueue = f.sdk.setQueue.bind(f.sdk);
+  f.sdk.setQueue = async (options) => {
+    await setQueue(options);
+    f.sdk.queue = { items: [original] };
+    f.sdk.nowPlayingItem = original;
+    return f.sdk.queue;
+  };
+
+  const third = await f.playback.execute(
+    {
+      type: "restart",
+      initialState: "playing",
+      context: { ...f.context, commandId: "restart-3", attemptId: "attempt-3" },
+    },
+    signal,
+  );
+  f.sdk.playbackState = 5;
+  f.sdk.nowPlayingItem = undefined;
+  f.sdk.emit("playbackStateDidChange", {
+    state: 5,
+    nowPlayingItem: original,
+  });
+
+  expect((await f.playback.observe(signal).next()).value?.state).toBe(
+    "unknown",
+  );
+  expect(third.status).toBe("unknown");
+});
+
+test.each([false, true])(
+  "reconcile: 같은 item의 Queue 교체는 이벤트 전달 %s에도 unknown이에요",
+  async (notify) => {
+    const f = await setup();
+    await f.play();
+    const before = (await f.playback.observe(signal).next()).value;
+    if (!before?.binding) throw new Error("binding이 필요해요.");
+    const queue = f.sdk.queue;
+
+    f.sdk.queue = { items: queue.items };
+    if (notify) f.sdk.emit("queueItemsDidChange", {});
+
+    expect(f.sdk.queue).not.toBe(queue);
+    expect(
+      value(await f.playback.reconcile(before.binding, signal)).status,
+    ).toBe("unknown");
+    expect((await f.playback.observe(signal).next()).value?.state).toBe(
+      "unknown",
+    );
+  },
+);

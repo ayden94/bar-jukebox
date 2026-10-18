@@ -9,7 +9,10 @@ export type MusicKitScenario =
   | "musickit-adapter"
   | "musickit-auth-failure"
   | "musickit-missing-token";
-const evidence = resolve(".omo/evidence/boot-selected-music-playback/task-6");
+const evidence = resolve(
+  process.env.MUSICKIT_QA_EVIDENCE_DIR ??
+    ".omo/evidence/boot-selected-music-playback/task-6",
+);
 const phase = (name: string) =>
   `document.querySelector("[data-browser-phase]")?.dataset.browserPhase === ${JSON.stringify(name)}`;
 
@@ -35,6 +38,7 @@ export async function runMusicKitScenario(scenario: MusicKitScenario) {
       height: 900,
     });
     const capture = async (name: string) => {
+      if (process.env.MUSICKIT_QA_REUSE_VISUALS === "1") return;
       await Bun.write(
         `${evidence}/${name}-desktop.png`,
         await view.screenshot(),

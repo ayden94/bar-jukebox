@@ -20,14 +20,14 @@ export interface MusicKitInstance {
   previewOnly: boolean;
   playbackMode: number;
   volume: number;
-  authorize(): Promise<string | void>;
+  authorize(): Promise<string | undefined>;
   unauthorize(): Promise<void>;
   hasMusicSubscription(): Promise<boolean>;
   setQueue(options: {
     readonly song: string;
     readonly startPlaying: false;
     readonly startTime: 0;
-  }): Promise<MusicKitQueue | void>;
+  }): Promise<MusicKitQueue | undefined>;
   play(): Promise<void> | void;
   pause(): Promise<void> | void;
   stop(): Promise<void>;

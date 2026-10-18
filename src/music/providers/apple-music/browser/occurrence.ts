@@ -3,10 +3,16 @@ import type {
   PlaybackContext,
   PlaybackObservation,
 } from "../../../contracts/index";
-import type { MusicKitInstance, MusicKitItem, MusicKitSDK } from "./sdk";
+import type {
+  MusicKitInstance,
+  MusicKitItem,
+  MusicKitQueue,
+  MusicKitSDK,
+} from "./sdk";
 
 export type Occurrence = {
   readonly id: string;
+  readonly queue: MusicKitQueue;
   readonly item: MusicKitItem;
   readonly trackId: string;
   context: PlaybackContext;
@@ -17,6 +23,7 @@ export type Occurrence = {
 
 export function ownsQueue(music: MusicKitInstance, owned: Occurrence): boolean {
   return (
+    music.queue === owned.queue &&
     music.queue?.items.length === 1 &&
     music.queue.items[0] === owned.item &&
     owned.item.id === owned.trackId
