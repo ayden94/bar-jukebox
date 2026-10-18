@@ -88,10 +88,13 @@ test.each([
       expect(snapshot.active).toEqual(selected);
       expect(snapshot.nextBoot.issue).toBeNull();
       const musickit = selected.modeId === "musickit";
-      expect(snapshot.readiness).toBe(
-        musickit ? "auth-required" : "unavailable",
-      );
+      expect(snapshot.readiness).toBe("auth-required");
       expect(snapshot.owner).toBeNull();
+      expect(snapshot.auth).toMatchObject({
+        status: "reauth-required",
+        authorization: "none",
+        action: { kind: "user-gesture" },
+      });
       if (musickit) {
         expect(snapshot.auth).toMatchObject({
           status: "reauth-required",
@@ -106,8 +109,6 @@ test.each([
           ok: false,
           error: { code: "configuration" },
         });
-      } else {
-        expect(snapshot.auth).toBeNull();
       }
       expect(runtime.queueService.hasProviderConflict()).toBe(false);
       expect((await runtime.playbackService.snapshot()).owner).toBeNull();

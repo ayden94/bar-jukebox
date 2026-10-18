@@ -1,5 +1,6 @@
 import type {
   BrowserProviderFactory,
+  CatalogPort,
   MusicResult,
   ProviderIdentity,
 } from "../../music/contracts";
@@ -7,6 +8,7 @@ import { createAppleMusicBrowser } from "../../music/providers/apple-music/brows
 
 export type BrowserMusicOptions = {
   readonly api: (path: string, options?: RequestInit) => Promise<Response>;
+  readonly registerCatalog: (port: CatalogPort) => () => void;
 };
 
 export type SelectedBrowserFactory =

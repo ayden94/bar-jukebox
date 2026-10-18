@@ -38,7 +38,7 @@ export function useBrowserMusicHost() {
   return value;
 }
 
-type BrowserMusicHostProps = BrowserMusicOptions & {
+type BrowserMusicHostProps = Omit<BrowserMusicOptions, "registerCatalog"> & {
   readonly token: string;
   readonly children: ReactNode;
 };

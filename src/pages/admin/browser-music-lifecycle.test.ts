@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import type { BrowserMusicProvider, MusicResult } from "../../music/contracts";
+import type { PlaybackOwner } from "../../domains/playback/protocol";
+import type {
+  BrowserMusicProvider,
+  CatalogPort,
+  MusicResult,
+} from "../../music/contracts";
 import { createContrastingProvider } from "../../music/testing";
 import { BrowserMusicLifecycle } from "./browser-music-lifecycle";
 import {
@@ -15,7 +20,8 @@ function fixture(
     capabilities: { canStop: options.capabilities ?? true },
   });
   const calls: string[] = [];
-  let owner: unknown;
+  let owner: PlaybackOwner | undefined;
+  let channel: ReadableStreamDefaultController<Uint8Array> | null = null;
   const provider: BrowserMusicProvider = {
     identity: fixture.provider.identity,
     auth: {
@@ -60,6 +66,7 @@ function fixture(
       return new Response(
         new ReadableStream({
           start(controller) {
+            channel = controller;
             controller.enqueue(
               new TextEncoder().encode(
                 `event: snapshot\ndata: ${JSON.stringify({ owner, messages: [] })}\n\n`,
@@ -89,8 +96,86 @@ function fixture(
     fetcher,
     loadFactory,
   });
-  return { fixture, provider, host, calls, fetcher, loadFactory };
+  return {
+    fixture,
+    provider,
+    host,
+    calls,
+    fetcher,
+    loadFactory,
+    sendCatalog() {
+      if (!owner || !channel) throw new Error("연결된 실행기가 필요해요");
+      channel.enqueue(
+        new TextEncoder().encode(
+          `event: snapshot\ndata: ${JSON.stringify({
+            owner,
+            ownerConnected: true,
+            messages: [],
+            commands: [],
+            attempt: null,
+            catalogRequests: [
+              {
+                requestId: crypto.randomUUID(),
+                ownerEpoch: owner.ownerEpoch,
+                executorSessionId: owner.executorSessionId,
+                target: owner.connection.target,
+                connectionGeneration: owner.connection.connectionGeneration,
+                deadline: 1,
+                remainingMs: 5000,
+                operation: { type: "search", query: "곡", cursor: null },
+              },
+            ],
+          })}\n\n`,
+        ),
+      );
+    },
+  };
 }
+
+test("브라우저 catalog 등록: 이전 unregister는 새 포트를 지우지 않고 수명 종료는 진행 작업을 취소해요", async () => {
+  const f = fixture();
+  const started = Promise.withResolvers<AbortSignal>();
+  const calls: string[] = [];
+  const port = (name: string): CatalogPort => ({
+    search: (_query, _cursor, signal) => {
+      calls.push(name);
+      started.resolve(signal);
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    },
+    lookup: async () => ({ ok: false, error: { code: "invalid-track" } }),
+  });
+  const host = new BrowserMusicLifecycle({
+    token: "test",
+    api: f.fetcher,
+    fetcher: f.fetcher,
+    loadFactory: async () => ({
+      ok: true,
+      value: async (options) => {
+        const old = options.registerCatalog(port("old"));
+        options.registerCatalog(port("new"));
+        old();
+        return { ok: true, value: f.provider };
+      },
+    }),
+  });
+  try {
+    await host.connect(f.provider.identity, f.fixture.descriptor);
+    f.sendCatalog();
+    const signal = await started.promise;
+    expect(calls).toEqual(["new"]);
+
+    await host.disconnect();
+
+    expect(signal.aborted).toBe(true);
+    expect(host.getSnapshot().phase).toBe("disconnected");
+  } finally {
+    await host.close();
+  }
+});
 
 test("브라우저 호스트: 명시적 연결 전 초기화하지 않고 인증·기기·권한 순서로 한 번만 연결해요", async () => {
   const f = fixture();
@@ -197,6 +282,7 @@ test("브라우저 registry: MusicKit 선택은 factory만 반환하고 미구�
     await selected.value(
       {
         api: async () => Response.json({}, { status: 503 }),
+        registerCatalog: () => () => {},
       },
       new AbortController().signal,
     ),
