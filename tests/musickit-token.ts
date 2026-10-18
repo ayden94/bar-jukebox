@@ -2,25 +2,10 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { startServerProcess } from "./support/server-process";
 
-const scenarios = [
+export const musickitScenarios = [
   "musickit-token-boundary",
   "musickit-missing-token",
 ] as const;
-const args = process.argv.slice(2);
-if (
-  args.length &&
-  (args.length !== 2 ||
-    args[0] !== "--scenario" ||
-    !scenarios.some((id) => id === args[1]))
-) {
-  console.error(
-    JSON.stringify({ error: "unknown-scenario", scenario: args[1] ?? null }),
-  );
-  process.exit(1);
-}
-const selectedScenarios = args.length
-  ? scenarios.filter((id) => id === args[1])
-  : scenarios;
 const developerToken = [
   Buffer.from(
     JSON.stringify({ alg: "ES256", kid: "qa-not-a-real-key" }),
@@ -51,28 +36,31 @@ async function runCase(
   wrongMode = false,
 ) {
   const server = await startServerProcess({
-    command: [
-      process.execPath,
-      resolve("tests/support/musickit-server-entry.ts"),
-    ],
+    command: [process.execPath, resolve("dist/server/main.js")],
     env: {
       ...process.env,
       PORT: "0",
       DATABASE_URL: ":memory:",
       ADMIN_TOKEN: "qa-local-only",
       DEVICE_COOKIE_SECRET: "qa-local-only",
-      MUSIC_PROVIDER: undefined,
-      MUSIC_PLAYBACK_MODE: undefined,
-      PLAYBACK_DISABLED: undefined,
+      BASE_URL: "http://127.0.0.1",
+      MUSIC_PROVIDER: "apple-music",
+      MUSIC_PLAYBACK_MODE: wrongMode ? "applescript" : "musickit",
+      // 비선택 토큰 경계 검증에서도 실제 Music.app은 실행하지 않아요.
+      PLAYBACK_DISABLED: wrongMode ? "1" : undefined,
       MUSICKIT_DEVELOPER_TOKEN: token,
-      TASK3_MODE: wrongMode ? "applescript" : "musickit",
     },
   });
   const responses: unknown[] = [];
-  const request = async (path: string, authenticated = false) => {
+  const request = async (
+    path: string,
+    authenticated = false,
+    init: RequestInit = {},
+  ) => {
     const response = await fetch(`${server.url}${path}`, {
       headers: authenticated ? headers : {},
       signal: AbortSignal.timeout(5000),
+      ...init,
     });
     const text = await response.text();
     if (
@@ -81,14 +69,18 @@ async function runCase(
       wrongMode ||
       kind !== "supplied"
     ) {
-      for (const secret of [developerToken, expiredToken])
-        assert(!text.includes(secret), "비밀이 공개 응답에 노출됐어요");
+      for (const secret of [developerToken, expiredToken, token]) {
+        if (secret)
+          assert(!text.includes(secret), "비밀이 공개 응답에 노출됐어요");
+      }
     }
     responses.push({
       path,
+      method: init.method ?? "GET",
       authenticated,
       status: response.status,
       cacheControl: response.headers.get("cache-control"),
+      contentType: response.headers.get("content-type"),
       body:
         path === "/" || path.startsWith("/admin/")
           ? {
@@ -106,6 +98,14 @@ async function runCase(
   try {
     const unauthorized = await request("/api/admin/music/developer-token");
     assert.equal(unauthorized.response.status, 401);
+    const wrongAdmin = await request(
+      "/api/admin/music/developer-token",
+      false,
+      {
+        headers: { "x-admin-token": "not-the-admin" },
+      },
+    );
+    assert.equal(wrongAdmin.response.status, 401);
     const authorized = await request("/api/admin/music/developer-token", true);
     assert.equal(authorized.response.headers.get("cache-control"), "no-store");
     assert.equal(
@@ -135,10 +135,70 @@ async function runCase(
     });
     assert.equal(state.owner, null);
     assert.equal(state.connectedTarget, null);
+    assert.deepEqual(state.locks, { providerId: true, modeId: true });
+    assert.deepEqual(state.activeSources, {
+      providerId: "environment",
+      modeId: "environment",
+    });
     if (!wrongMode) {
       assert.equal(state.readiness, "auth-required");
       assert.equal(state.auth.authorization, "none");
       assert.equal(state.auth.status, "reauth-required");
+      assert.equal(state.auth.action.kind, "user-gesture");
+      assert.equal(state.reason, state.auth.action.label);
+      assert.equal(
+        (
+          await request("/api/admin/music/auth/connect", false, {
+            method: "POST",
+          })
+        ).response.status,
+        401,
+      );
+      assert.equal(
+        (
+          await request("/api/admin/music/auth/connect", true, {
+            method: "POST",
+          })
+        ).response.status,
+        409,
+      );
+      const configure = (config: unknown, authenticated = true) =>
+        request("/api/admin/music/config", authenticated, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(authenticated ? headers : {}),
+          },
+          body: JSON.stringify(config),
+        });
+      assert.equal((await configure(state.active, false)).response.status, 401);
+      assert.equal(
+        (await configure({ providerId: 42, modeId: [] })).response.status,
+        400,
+      );
+      assert.equal(
+        (
+          await configure({
+            providerId: "apple-music",
+            modeId: "applescript",
+          })
+        ).response.status,
+        409,
+      );
+      const saved = await configure(state.active);
+      assert.equal(saved.response.status, 201);
+      const after = JSON.parse(saved.text);
+      assert.deepEqual(after.active, state.active);
+      assert.deepEqual(after.nextBoot.config, state.active);
+      assert.equal(after.restartRequired, false);
+      assert.equal(after.owner, null);
+      assert.equal(after.auth.authorization, "none");
+      assert.equal(after.readiness, "auth-required");
+      assert.equal(
+        (await request("/api/admin/music/developer-token", true)).response
+          .status,
+        kind === "supplied" ? 200 : 503,
+      );
     }
     for (const path of ["/", "/admin/music", "/admin/qr", "/api/state"]) {
       assert.equal((await request(path)).response.status, 200);
@@ -176,6 +236,9 @@ async function runCase(
     completed = true;
   } finally {
     await server.stop();
+    assert(!server.output.includes(developerToken));
+    assert(!server.output.includes(expiredToken));
+    if (token) assert(!server.output.includes(token));
     await assert.rejects(
       fetch(`${server.url}/api/state`, { signal: AbortSignal.timeout(1000) }),
     );
@@ -184,6 +247,8 @@ async function runCase(
       kind,
       url: server.url,
       database: ":memory:",
+      entry: "dist/server/main.js",
+      runtimeInjection: false,
       assertions: completed ? "PASS" : "FAIL",
       responses,
       cleanup: { processStopped: true, portClosed: true },
@@ -191,8 +256,11 @@ async function runCase(
   }
 }
 
-try {
-  for (const scenario of selectedScenarios) {
+export async function runMusicKitScenario(
+  scenario: (typeof musickitScenarios)[number],
+) {
+  receipts.length = 0;
+  try {
     if (scenario === "musickit-token-boundary") {
       await runCase(scenario, "supplied", developerToken);
       await runCase(scenario, "wrong-mode", developerToken, true);
@@ -201,20 +269,42 @@ try {
       await runCase(scenario, "expired", expiredToken);
       await runCase(scenario, "malformed", "not-a-token");
     }
+    console.info(
+      JSON.stringify(
+        {
+          result: "PASS",
+          scenario,
+          proof:
+            "live-local-http-env-only-production-boot; token-shape-fixture-not-Apple-authentication",
+          receipts,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({ result: "FAIL", scenario, receipts }, null, 2),
+    );
+    throw error;
   }
-  console.info(
-    JSON.stringify(
-      {
-        result: "PASS",
-        proof:
-          "live-local-http-real-provider-and-production-controller; token-shape-fixture-not-Apple-authentication",
-        receipts,
-      },
-      null,
-      2,
-    ),
-  );
-} catch (error) {
-  console.error(JSON.stringify({ result: "FAIL", receipts }, null, 2));
-  throw error;
+}
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  if (
+    args.length &&
+    (args.length !== 2 ||
+      args[0] !== "--scenario" ||
+      !musickitScenarios.some((id) => id === args[1]))
+  ) {
+    console.error(
+      JSON.stringify({ error: "unknown-scenario", scenario: args[1] ?? null }),
+    );
+    process.exit(1);
+  }
+  for (const scenario of musickitScenarios) {
+    if (!args.length || scenario === args[1])
+      await runMusicKitScenario(scenario);
+  }
 }

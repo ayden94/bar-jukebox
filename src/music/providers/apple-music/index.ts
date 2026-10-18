@@ -17,5 +17,18 @@ export const appleMusicDescriptor = {
         canSeek: true,
       },
     },
+    {
+      modeId: "musickit",
+      location: "browser",
+      capabilities: {
+        canPlayExactTrack: true,
+        canPause: true,
+        canResume: true,
+        canStop: true,
+        canRestart: true,
+        canObserveEnd: true,
+        canSeek: true,
+      },
+    },
   ],
 } as const satisfies ProviderDescriptor;
