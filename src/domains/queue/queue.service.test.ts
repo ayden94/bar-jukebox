@@ -41,6 +41,9 @@ function memoryRepository(): QueueRepository {
     ),
     returnToPrevious: initialized(repository.returnToPrevious.bind(repository)),
     finishNowPlaying: initialized(repository.finishNowPlaying.bind(repository)),
+    confirmBrowserStopped: initialized(
+      repository.confirmBrowserStopped.bind(repository),
+    ),
   };
 }
 

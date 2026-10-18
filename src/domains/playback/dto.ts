@@ -17,6 +17,20 @@ import type {
   PlaybackTarget,
   Reconciliation,
 } from "../../music/contracts";
+import type { BrowserStoppedFence } from "./protocol";
+
+export class ConfirmBrowserStoppedDto {
+  @IsInt()
+  @FromBody("ownerEpoch")
+  ownerEpoch = 0;
+  @IsString()
+  @FromBody("executorSessionId")
+  executorSessionId = "";
+  @FromBody("attemptId")
+  attemptId: unknown;
+  @FromBody("songId")
+  songId: unknown;
+}
 
 export class PlaybackEventsDto {
   @Optional()
@@ -106,6 +120,21 @@ function integer(value: unknown): number {
   const result = number(value);
   if (!Number.isSafeInteger(result)) invalid();
   return result;
+}
+
+export function parseBrowserStoppedFence(value: unknown): BrowserStoppedFence {
+  const input = record(value);
+  const ownerEpoch = integer(input.ownerEpoch);
+  if (ownerEpoch === 0) invalid();
+  const attemptId = input.attemptId === null ? null : text(input.attemptId);
+  const songId = input.songId === null ? null : text(input.songId);
+  if ((attemptId === null) !== (songId === null)) invalid();
+  return {
+    ownerEpoch,
+    executorSessionId: text(input.executorSessionId),
+    attemptId,
+    songId,
+  };
 }
 
 function target(value: unknown): PlaybackTarget {

@@ -402,27 +402,33 @@ test("물리 정지 확인은 지정 attempt와 epoch가 맞을 때만 완료해
   const attempt = (await playback.snapshot()).attempt!;
   expect(await playback.confirmStopped("a")).toBe(false);
   expect(
-    await playback.confirmStopped("a", {
+    await playback.confirmBrowserStopped({
+      ...owner,
+      songId: "a",
       attemptId: "stale",
-      ownerEpoch: owner.ownerEpoch,
     }),
   ).toBe(false);
   expect(
-    await playback.confirmStopped("a", {
+    await playback.confirmBrowserStopped({
+      ...owner,
+      songId: "a",
       attemptId: attempt.attemptId,
       ownerEpoch: owner.ownerEpoch - 1,
     }),
   ).toBe(false);
 
   expect(
-    await playback.confirmStopped("a", {
+    await playback.confirmBrowserStopped({
+      ...owner,
+      songId: "a",
       attemptId: attempt.attemptId,
       ownerEpoch: owner.ownerEpoch,
     }),
   ).toBe(true);
 
   expect((await playback.snapshot()).owner?.stopConfirmed).toBe(true);
-  expect(await playback.releaseOwner(owner)).toBe(true);
+  expect((await playback.snapshot()).owner?.released).toBe(true);
+  expect(await playback.releaseOwner(owner)).toBe(false);
   const next = await playback.claimOwner({
     executorSessionId: "browser-b",
     connection: browser,

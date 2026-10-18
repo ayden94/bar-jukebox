@@ -4,14 +4,20 @@ import {
   history,
   nowPlaying,
   playbackAttempts,
+  playbackOwner,
   queue,
 } from "../../infra/schema";
 import {
   assertAttempt,
+  assertOwner,
   finishPlayback,
   reservePlayback,
 } from "../playback/playback.repository";
-import type { PlaybackFence, PlaybackReservation } from "../playback/protocol";
+import type {
+  BrowserStoppedFence,
+  PlaybackFence,
+  PlaybackReservation,
+} from "../playback/protocol";
 import type { Song } from "../shared/types";
 import {
   decodePersistedSong,
@@ -55,6 +61,12 @@ export interface QueueRepository {
     max: number,
     fence?: PlaybackFence,
     finishedAt?: number,
+  ): Promise<void>;
+  confirmBrowserStopped(
+    song: Song | null,
+    fence: BrowserStoppedFence,
+    max: number,
+    finishedAt: number,
   ): Promise<void>;
 }
 
@@ -242,35 +254,79 @@ export class DrizzleQueueRepository implements QueueRepository {
             throw new Error("오래된 신청곡이에요");
           await finishPlayback(tx, fence, finishedAt);
         } else await this.assertLegacy(tx);
-        const current = (
-          await tx.select().from(nowPlaying).where(eq(nowPlaying.id, 1))
-        )[0];
-        if (
-          !current ||
-          decodePersistedSong(current.data, "now_playing", 1).id !== song.id
-        ) {
-          throw new Error("오래된 신청곡이에요");
-        }
-        if (result === "done") {
-          const rows = await tx
-            .select()
-            .from(history)
-            .orderBy(asc(history.position));
-          const existing = rows
-            .map((row) => decodePersistedSong(row.data, "history", row.id))
-            .slice(0, Math.max(0, max - 1));
-          await tx.delete(history);
-          await tx.insert(history).values(
-            [song, ...existing].map((entry, position) => ({
-              id: entry.id,
-              data: JSON.stringify(entry),
-              position,
-            })),
-          );
-        }
-        await tx.delete(nowPlaying).where(eq(nowPlaying.id, 1));
+        await this.finishSong(tx, song, result, max);
       }),
     );
+  }
+
+  confirmBrowserStopped(
+    song: Song | null,
+    fence: BrowserStoppedFence,
+    max: number,
+    finishedAt: number,
+  ): Promise<void> {
+    return this.serialize(() =>
+      this.db.transaction(async (tx) => {
+        const owner = await assertOwner(tx, fence);
+        if (owner.connection.location !== "browser")
+          throw new Error("브라우저 재생 소유권이 아니에요");
+        const attempt = await assertAttempt(tx, fence);
+        if (
+          (song?.id ?? null) !== fence.songId ||
+          (attempt?.songId ?? null) !== fence.songId ||
+          (attempt &&
+            attempt.state !== "waiting" &&
+            attempt.state !== "reconciliation-required")
+        )
+          throw new Error("오래된 신청곡이에요");
+        if (song) {
+          await finishPlayback(tx, fence, finishedAt);
+          await this.finishSong(tx, song, "done", max);
+        } else if ((await tx.select().from(nowPlaying)).length > 0) {
+          throw new Error("현재 재생 중인 신청을 먼저 확인해 주세요");
+        }
+        // 완료/history와 해제가 함께 commit돼야 다음 wake가 예약할 수 없어요.
+        await tx
+          .update(playbackOwner)
+          .set({ data: { ...owner, stopConfirmed: true, released: true } })
+          .where(eq(playbackOwner.id, 1));
+      }),
+    );
+  }
+
+  private async finishSong(
+    tx: Transaction,
+    song: Song,
+    result: "done" | "failed",
+    max: number,
+  ): Promise<void> {
+    const current = (
+      await tx.select().from(nowPlaying).where(eq(nowPlaying.id, 1))
+    )[0];
+    if (
+      !current ||
+      decodePersistedSong(current.data, "now_playing", 1).id !== song.id
+    ) {
+      throw new Error("오래된 신청곡이에요");
+    }
+    if (result === "done") {
+      const rows = await tx
+        .select()
+        .from(history)
+        .orderBy(asc(history.position));
+      const existing = rows
+        .map((row) => decodePersistedSong(row.data, "history", row.id))
+        .slice(0, Math.max(0, max - 1));
+      await tx.delete(history);
+      await tx.insert(history).values(
+        [song, ...existing].map((entry, position) => ({
+          id: entry.id,
+          data: JSON.stringify(entry),
+          position,
+        })),
+      );
+    }
+    await tx.delete(nowPlaying).where(eq(nowPlaying.id, 1));
   }
 
   private async assertLegacy(tx: Transaction): Promise<void> {
