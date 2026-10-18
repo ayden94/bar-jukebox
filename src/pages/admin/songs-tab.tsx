@@ -44,10 +44,15 @@ export function SongsTab({ snap, act, api }: SongsTabProps) {
             }
             onSkip={() => act("/api/admin/skip")}
             onConfirmStopped={(fence) =>
-              act("/api/admin/confirm-stopped", {
-                ...fence,
-                stoppedConfirmed: true,
-              })
+              fence.browser
+                ? act(
+                    "/api/admin/playback/confirm-browser-stopped",
+                    fence.browser,
+                  )
+                : act("/api/admin/confirm-stopped", {
+                    ...fence,
+                    stoppedConfirmed: true,
+                  })
             }
           />
           <section className={admin.panel} aria-labelledby="queue-heading">

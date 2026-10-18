@@ -59,6 +59,20 @@ async function fixture(channelStatus = 200) {
     }
     if (url.pathname.endsWith("/receipt")) receipt.resolve();
     if (url.pathname.endsWith("/observation")) observation.resolve();
+    if (url.pathname.endsWith("/release")) {
+      if (!source || !owner) throw new Error("해제할 연결이 필요해요");
+      source.enqueue(
+        new TextEncoder().encode(
+          `event: snapshot\ndata: ${JSON.stringify({
+            owner: { ...owner, released: true, stopConfirmed: true },
+            messages: [],
+          })}\n\n`,
+        ),
+      );
+      // SSE를 먼저 처리해도 release 응답을 읽을 수 있어야 해요.
+      await Promise.resolve();
+      expect(init.signal?.aborted).toBe(false);
+    }
     return Response.json({ ok: true });
   };
   const executor = new BrowserPlaybackExecutor({
@@ -156,6 +170,17 @@ test("재생 채널의 인증 철회는 실행기와 구독을 정리해요", as
   const f = await fixture(401);
   await f.disconnected.promise;
   await f.executor.dispose();
+  expect(f.calls).toEqual([]);
+  expect(f.provider.controls.subscriberCount).toBe(0);
+});
+
+test("정상 해제: released SSE가 먼저 와도 release 응답 뒤에 구독을 정리해요", async () => {
+  const f = await fixture();
+  await f.opened.promise;
+
+  await f.executor.release();
+
+  expect(f.paths.filter((path) => path.endsWith("/release"))).toHaveLength(1);
   expect(f.calls).toEqual([]);
   expect(f.provider.controls.subscriberCount).toBe(0);
 });

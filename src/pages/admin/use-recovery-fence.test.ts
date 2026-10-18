@@ -1,6 +1,35 @@
 import { expect, test } from "bun:test";
 import { captureRecoveryFence } from "./use-recovery-fence";
 
+test("복구 확인: 브라우저 owner는 새 정지 확인 endpoint의 전체 fence를 보존해요", async () => {
+  const api = async () =>
+    Response.json({
+      owner: {
+        ownerEpoch: 7,
+        executorSessionId: "browser-document",
+        connection: { location: "browser" },
+      },
+      attempt: {
+        songId: "song-1",
+        attemptId: "attempt-1",
+        state: "reconciliation-required",
+      },
+    });
+
+  const fence = await captureRecoveryFence(
+    api,
+    "song-1",
+    new AbortController().signal,
+  );
+
+  expect(fence.browser).toEqual({
+    ownerEpoch: 7,
+    executorSessionId: "browser-document",
+    attemptId: "attempt-1",
+    songId: "song-1",
+  });
+});
+
 test("복구 확인: 화면을 표시할 때 조회한 시도와 owner 세대를 고정해요", async () => {
   let current = {
     owner: { ownerEpoch: 4 },

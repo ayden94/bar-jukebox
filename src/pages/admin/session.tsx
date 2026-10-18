@@ -13,6 +13,7 @@ import { apiErrorMessage } from "../shared";
 import { useTheme } from "../theme";
 import type { Snapshot } from "../types";
 import { AuthGate } from "./auth-gate";
+import { BrowserMusicHost } from "./browser-music-host";
 import { NavigationFeedback } from "./navigation-feedback";
 import { admin } from "./styles";
 
@@ -264,7 +265,9 @@ export function AdminSession({
         </header>
         <NavigationFeedback />
         <AdminSessionContext.Provider value={{ act, api, snap }}>
-          <main>{children}</main>
+          <BrowserMusicHost api={api} token={token}>
+            <main>{children}</main>
+          </BrowserMusicHost>
         </AdminSessionContext.Provider>
       </div>
     </div>

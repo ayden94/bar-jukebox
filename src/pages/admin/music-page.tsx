@@ -1,14 +1,22 @@
 import { useState } from "react";
+import {
+  BrowserMusicControls,
+  useBrowserMusicHost,
+} from "./browser-music-host";
 import { MusicConnectionPanel, MusicSettingsPanel } from "./music-panel";
 import type { MusicConfigView } from "./music-types";
-import { useAdminSession } from "./session";
 import { admin } from "./styles";
 import { UnsavedChanges } from "./unsaved-changes";
-import { useMusicSettings } from "./use-music-settings";
 
 export default function AdminMusicPage() {
-  const { api } = useAdminSession();
-  const music = useMusicSettings(api);
+  const host = useBrowserMusicHost();
+  const music = host.music;
+  const active = music.snapshot?.active;
+  const browserMode =
+    music.snapshot?.providers
+      .find((provider) => provider.descriptor.providerId === active?.providerId)
+      ?.descriptor.modes.find((mode) => mode.modeId === active?.modeId)
+      ?.location === "browser";
   const [draft, setDraft] = useState<MusicConfigView | null>(null);
   const saved = music.snapshot?.nextBoot.config;
   const selected = draft ?? saved ?? { providerId: "", modeId: "" };
@@ -27,7 +35,7 @@ export default function AdminMusicPage() {
         <button
           className={`${admin.button} ${admin.ghost}`}
           disabled={music.pending}
-          onClick={() => void music.refresh()}
+          onClick={() => void host.refresh()}
           type="button"
         >
           상태 새로고침
@@ -42,6 +50,7 @@ export default function AdminMusicPage() {
       <UnsavedChanges dirty={dirty} pending={music.mutating} />
       {music.snapshot ? (
         <div className="mt-5 grid grid-cols-2 items-start gap-[var(--admin-gap)] max-[960.001px]:grid-cols-1">
+          {browserMode && <BrowserMusicControls />}
           <MusicSettingsPanel
             snapshot={music.snapshot}
             selected={selected}
@@ -52,13 +61,15 @@ export default function AdminMusicPage() {
               if (await music.act("/config", selected)) setDraft(null);
             }}
           />
-          <MusicConnectionPanel
-            snapshot={music.snapshot}
-            targets={music.targets}
-            pending={music.pending}
-            onAction={music.act}
-            onLoadTargets={music.loadTargets}
-          />
+          {!browserMode && (
+            <MusicConnectionPanel
+              snapshot={music.snapshot}
+              targets={music.targets}
+              pending={music.pending}
+              onAction={music.act}
+              onLoadTargets={music.loadTargets}
+            />
+          )}
         </div>
       ) : (
         <div className={admin.empty}>
