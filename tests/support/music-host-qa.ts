@@ -31,11 +31,14 @@ export const hostProbe = `(() => {
   };
 })();`;
 
+// allow: SIZE_OK — 빌드·서버·프록시·SSE 자원의 생성과 정리를 한 fixture 수명에서 보장해요.
 // 제품과 같은 production SSR/라우트/스타일 빌드에 공급자 모듈 하나만 QA 경계로 치환해요.
 export async function startMusicHostQA(
   options: {
     readonly musicKit?: "fixture" | "production";
     readonly token?: "valid-fixture" | "invalid" | "expired" | "missing";
+    readonly boot?: "unlocked" | { providerId: string; modeId: string };
+    readonly disabled?: boolean;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "music-host-"));
@@ -44,6 +47,7 @@ export async function startMusicHostQA(
   const streams = new Map<string, AbortController>();
   const requests: { path: string; status: number; body: unknown }[] = [];
   let failRelease = false;
+  let failSnapshot: "music" | "playback" | null = null;
   try {
     await symlink(
       resolve("node_modules"),
@@ -80,55 +84,63 @@ export async function startMusicHostQA(
       configFile: resolve("vite.server.config.ts"),
       build: { outDir: join(directory, "dist/server") },
     });
-    server = await startServerProcess({
-      command: options.musicKit
-        ? [
-            process.execPath,
-            "--preload",
-            resolve("tests/support/itunes-preload.ts"),
-            join(directory, "dist/server/main.js"),
-          ]
-        : [
-            process.execPath,
-            resolve("tests/support/music-host-server-entry.ts"),
-            join(directory, "dist/server/main.js"),
-          ],
-      env: {
-        ...process.env,
-        PORT: "0",
-        BASE_URL: "http://127.0.0.1",
-        DATABASE_URL: `file:${join(directory, "qa.sqlite")}`,
-        ADMIN_TOKEN: "qa-local-only",
-        DEVICE_COOKIE_SECRET: "qa-local-only",
-        ...(options.musicKit
-          ? {
-              MUSIC_PROVIDER: "apple-music",
-              MUSIC_PLAYBACK_MODE: "musickit",
-              PLAYBACK_DISABLED: "0",
-              MUSICKIT_DEVELOPER_TOKEN:
-                options.token === "invalid"
-                  ? "invalid"
-                  : options.token === "missing" ||
-                      options.musicKit === "production"
-                    ? ""
-                    : [
-                        Buffer.from(
-                          JSON.stringify({ alg: "ES256", kid: "QA" }),
-                        ).toString("base64url"),
-                        Buffer.from(
-                          JSON.stringify({
-                            iss: "QA",
-                            iat: 1,
-                            exp: options.token === "expired" ? 2 : 4102444800,
-                          }),
-                        ).toString("base64url"),
-                        Buffer.alloc(64).toString("base64url"),
-                      ].join("."),
-            }
-          : {}),
-      },
-    });
-    const upstream = server.url;
+    const start = () =>
+      startServerProcess({
+        command: options.musicKit
+          ? [
+              process.execPath,
+              "--preload",
+              resolve("tests/support/itunes-preload.ts"),
+              join(directory, "dist/server/main.js"),
+            ]
+          : [
+              process.execPath,
+              resolve("tests/support/music-host-server-entry.ts"),
+              join(directory, "dist/server/main.js"),
+            ],
+        env: {
+          ...process.env,
+          PORT: "0",
+          BASE_URL: "http://127.0.0.1",
+          DATABASE_URL: `file:${join(directory, "qa.sqlite")}`,
+          ADMIN_TOKEN: "qa-local-only",
+          DEVICE_COOKIE_SECRET: "qa-local-only",
+          ...(options.musicKit
+            ? {
+                MUSIC_PROVIDER:
+                  options.boot === "unlocked"
+                    ? undefined
+                    : (options.boot?.providerId ?? "apple-music"),
+                MUSIC_PLAYBACK_MODE:
+                  options.boot === "unlocked"
+                    ? undefined
+                    : (options.boot?.modeId ?? "musickit"),
+                PLAYBACK_DISABLED: options.disabled ? "1" : "0",
+                MUSICKIT_DEVELOPER_TOKEN:
+                  options.token === "invalid"
+                    ? "invalid"
+                    : options.token === "missing" ||
+                        options.musicKit === "production"
+                      ? ""
+                      : [
+                          Buffer.from(
+                            JSON.stringify({ alg: "ES256", kid: "QA" }),
+                          ).toString("base64url"),
+                          Buffer.from(
+                            JSON.stringify({
+                              iss: "QA",
+                              iat: 1,
+                              exp: options.token === "expired" ? 2 : 4102444800,
+                            }),
+                          ).toString("base64url"),
+                          Buffer.alloc(64).toString("base64url"),
+                        ].join("."),
+              }
+            : {}),
+        },
+      });
+    server = await start();
+    let upstream = server.url;
     proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -141,6 +153,15 @@ export async function startMusicHostQA(
           });
         const body =
           request.method === "POST" ? await request.clone().json() : null;
+        if (
+          (failSnapshot === "music" && url.pathname === "/api/admin/music") ||
+          (failSnapshot === "playback" &&
+            url.pathname === "/api/admin/playback/snapshot")
+        )
+          return Response.json(
+            { error: { message: "QA 상태 조회 실패" } },
+            { status: 503 },
+          );
         if (url.pathname.endsWith("/release") && failRelease) {
           requests.push({ path: url.pathname, body, status: 503 });
           return Response.json({ ok: false }, { status: 503 });
@@ -207,6 +228,15 @@ export async function startMusicHostQA(
       streams,
       setFailRelease(value: boolean) {
         failRelease = value;
+      },
+      setFailSnapshot(value: "music" | "playback" | null) {
+        failSnapshot = value;
+      },
+      async restart() {
+        for (const stream of streams.values()) stream.abort();
+        await server?.stop();
+        server = await start();
+        upstream = server.url;
       },
       async api(path: string, body?: unknown) {
         const response = await fetch(`${url}${path}`, {

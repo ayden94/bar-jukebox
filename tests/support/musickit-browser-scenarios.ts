@@ -16,6 +16,7 @@ const evidence = resolve(
 const phase = (name: string) =>
   `document.querySelector("[data-browser-phase]")?.dataset.browserPhase === ${JSON.stringify(name)}`;
 
+// allow: SIZE_OK — 인증 실패와 재생 검증이 같은 SDK/서버 수명과 정리 증거를 공유해요.
 export async function runMusicKitScenario(scenario: MusicKitScenario) {
   await mkdir(evidence, { recursive: true });
   const failures =
@@ -55,7 +56,20 @@ export async function runMusicKitScenario(scenario: MusicKitScenario) {
       );
     };
     const click = async (selector: string, condition: string) => {
+      if (
+        await view.evaluate(
+          `!!document.querySelector(${JSON.stringify(selector)})?.closest("details:not([open])")`,
+        )
+      ) {
+        await view.evaluate(
+          'document.querySelector("section[data-preparation] details > summary")?.scrollIntoView({block:"center"})',
+        );
+        await view.click("section[data-preparation] details > summary");
+      }
       await armCondition(view, condition);
+      await view.evaluate(
+        `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:"center"})`,
+      );
       await view.click(selector);
       await expectCondition(view, `${scenario}:${selector}`);
       actions.push({ action: "click", selector, failure, result: "PASS" });
@@ -74,7 +88,7 @@ export async function runMusicKitScenario(scenario: MusicKitScenario) {
       await view.type("qa-local-only");
       await click(
         'button[type="submit"]',
-        '!!document.querySelector("#browser-music-connect")',
+        '!!document.querySelector("[data-preparation]") && document.querySelector("[data-preparation]").dataset.preparation !== "unknown"',
       );
       assert.equal(
         (await qa.api("/api/admin/playback/snapshot")).body.owner,
@@ -87,10 +101,28 @@ export async function runMusicKitScenario(scenario: MusicKitScenario) {
       if (failure === "subscription")
         await view.evaluate("window.__musickitQA.subscription = false");
       if (failure || scenario === "musickit-missing-token") {
-        await click(
-          "#browser-music-connect",
-          `${phase("unavailable")} && !document.querySelector("#browser-music-connect").disabled`,
-        );
+        if (
+          failure === "invalid" ||
+          failure === "expired" ||
+          scenario === "musickit-missing-token"
+        ) {
+          assert.equal(
+            await view.evaluate(
+              'document.querySelector("[data-preparation]").dataset.preparation',
+            ),
+            "installation-required",
+          );
+          assert.equal(
+            await view.evaluate(
+              '!!document.querySelector("#browser-music-connect")',
+            ),
+            false,
+          );
+        } else
+          await click(
+            "#browser-music-connect",
+            `${phase("unavailable")} && document.querySelector("#browser-music-connect")?.disabled === false`,
+          );
         assert.equal(
           (await qa.api("/api/admin/playback/snapshot")).body.owner,
           null,
@@ -123,7 +155,7 @@ export async function runMusicKitScenario(scenario: MusicKitScenario) {
           else {
             await click(
               "#browser-music-connect",
-              `${phase("unavailable")} && !document.querySelector("#browser-music-connect").disabled`,
+              `${phase("unavailable")} && document.querySelector("#browser-music-connect")?.disabled === false`,
             );
             assert.equal(
               await view.evaluate("window.__musickitQA.listenerCount"),
