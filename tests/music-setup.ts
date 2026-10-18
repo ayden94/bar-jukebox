@@ -118,7 +118,7 @@ async function bootMatrix() {
     { providerId: "apple-music", modeId: "musickit" },
     { providerId: "youtube-music", modeId: "browser-companion" },
   ]) {
-    // AppleScript의 외부 앱은 차단하고, 브라우저 방식은 실제 인증 대기 또는 미구현 상태를 확인해요.
+    // AppleScript의 외부 앱은 차단하고, 브라우저 방식은 owner 없는 인증 대기를 확인해요.
     const disabled = selected.modeId === "applescript";
     await withServer(selected, disabled, async (server) => {
       const response = await fetch(`${server.url}/api/admin/music`, {
@@ -136,11 +136,9 @@ async function bootMatrix() {
           ? process.platform === "darwin"
             ? "disabled"
             : "setup-required"
-          : selected.modeId === "musickit"
-            ? "auth-required"
-            : "unavailable",
+          : "auth-required",
       );
-      if (selected.modeId === "musickit") {
+      if (!disabled) {
         assert.equal(state.auth.authorization, "none");
         assert.equal(state.auth.status, "reauth-required");
         assert.equal(state.auth.action.kind, "user-gesture");

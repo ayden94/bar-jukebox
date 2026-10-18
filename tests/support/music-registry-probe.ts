@@ -1,5 +1,6 @@
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
+import type { CatalogPort } from "../../src/music/contracts";
 import type { MusicServerOptions } from "../../src/music/registry";
 import { createContrastingProvider } from "../../src/music/testing";
 
@@ -14,6 +15,12 @@ const browserFixture = createContrastingProvider({
   modeId: "musickit",
   location: "browser",
 });
+const youtubeFixture = createContrastingProvider({
+  providerId: "youtube-music",
+  modeId: "browser-companion",
+  location: "browser",
+});
+const catalogTransport = youtubeFixture.provider.catalog;
 const developerToken = "factory-forwarding-fixture";
 mock.module("../../src/music/providers/apple-music/server", () => ({
   async createAppleMusicServer(
@@ -52,6 +59,25 @@ mock.module("../../src/music/providers/apple-music/server", () => ({
     };
   },
 }));
+mock.module("../../src/music/providers/youtube-music/server", () => ({
+  async createYouTubeMusicServer(
+    options: { transport: CatalogPort },
+    signal: AbortSignal,
+  ) {
+    signal.throwIfAborted();
+    assert.deepEqual(options, { transport: catalogTransport });
+    calls.push("youtube-music/browser-companion");
+    return {
+      ok: true,
+      value: {
+        ...youtubeFixture.provider,
+        artwork: {
+          fetch: async () => ({ ok: false, error: { code: "invalid-track" } }),
+        },
+      },
+    };
+  },
+}));
 
 const { loadMusicServer, musicDescriptors } = await import(
   "../../src/music/registry"
@@ -59,6 +85,16 @@ const { loadMusicServer, musicDescriptors } = await import(
 assert.deepEqual(calls, []);
 const rows = [];
 try {
+  const missingTransport = await loadMusicServer(
+    youtubeFixture.provider.identity,
+    { platform: "darwin", disabled: true },
+    new AbortController().signal,
+  );
+  assert.deepEqual(missingTransport, {
+    ok: false,
+    error: { code: "configuration" },
+  });
+  assert.deepEqual(calls, []);
   for (const descriptor of musicDescriptors) {
     for (const mode of descriptor.modes) {
       const before = calls.length;
@@ -72,16 +108,15 @@ try {
           platform: "darwin",
           disabled: true,
           musickitDeveloperToken: developerToken,
+          catalogTransport,
         },
         new AbortController().signal,
       );
-      const expected = descriptor.providerId === "apple-music";
-      assert.equal(result.ok, expected);
-      assert.deepEqual(
-        calls.slice(before),
-        expected ? [`${selected.providerId}/${selected.modeId}`] : [],
-      );
-      if (!result.ok) assert.equal(result.error.code, "unsupported");
+      assert.equal(result.ok, true);
+      assert.deepEqual(calls.slice(before), [
+        `${selected.providerId}/${selected.modeId}`,
+      ]);
+      if (result.ok) assert.deepEqual(result.value.identity, selected);
       rows.push({
         selected,
         factoryCalls: calls.slice(before),
@@ -108,6 +143,11 @@ try {
       status: "passed",
       surface: "source-loader-fixture",
       rows,
+      missingTransport: {
+        selected: youtubeFixture.provider.identity,
+        result: "configuration",
+        factoryCalls: [],
+      },
       assertions: {
         selectedFactoryOnly: true,
         noFactoryOnImport: true,
@@ -120,7 +160,9 @@ try {
 } finally {
   await fixture.provider.dispose();
   await browserFixture.provider.dispose();
+  await youtubeFixture.provider.dispose();
   assert.equal(fixture.controls.subscriberCount, 0);
   assert.equal(browserFixture.controls.subscriberCount, 0);
+  assert.equal(youtubeFixture.controls.subscriberCount, 0);
   mock.restore();
 }
