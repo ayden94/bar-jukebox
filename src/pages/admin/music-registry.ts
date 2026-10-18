@@ -3,6 +3,7 @@ import type {
   MusicResult,
   ProviderIdentity,
 } from "../../music/contracts";
+import { createAppleMusicBrowser } from "../../music/providers/apple-music/browser";
 
 export type BrowserMusicOptions = {
   readonly api: (path: string, options?: RequestInit) => Promise<Response>;
@@ -18,10 +19,12 @@ export async function loadBrowserMusicFactory(
   signal: AbortSignal,
 ): Promise<MusicResult<SelectedBrowserFactory>> {
   signal.throwIfAborted();
+  if (selected.providerId === "apple-music" && selected.modeId === "musickit") {
+    return { ok: true, value: createAppleMusicBrowser };
+  }
   if (
-    (selected.providerId === "apple-music" && selected.modeId === "musickit") ||
-    (selected.providerId === "youtube-music" &&
-      selected.modeId === "browser-companion")
+    selected.providerId === "youtube-music" &&
+    selected.modeId === "browser-companion"
   ) {
     return { ok: false, error: { code: "unsupported" } };
   }

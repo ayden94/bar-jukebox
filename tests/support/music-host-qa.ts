@@ -32,7 +32,12 @@ export const hostProbe = `(() => {
 })();`;
 
 // 제품과 같은 production SSR/라우트/스타일 빌드에 공급자 모듈 하나만 QA 경계로 치환해요.
-export async function startMusicHostQA() {
+export async function startMusicHostQA(
+  options: {
+    readonly musicKit?: "fixture" | "production";
+    readonly token?: "valid-fixture" | "invalid" | "expired" | "missing";
+  } = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "music-host-"));
   let server: Awaited<ReturnType<typeof startServerProcess>> | undefined;
   let proxy: ReturnType<typeof Bun.serve> | undefined;
@@ -53,10 +58,19 @@ export async function startMusicHostQA() {
           enforce: "pre",
           resolveId(source, importer) {
             if (
+              !options.musicKit &&
               source === "./music-registry" &&
               importer?.endsWith("/src/pages/admin/browser-music-host.tsx")
             )
               return resolve("tests/support/music-host-registry.ts");
+            if (
+              options.musicKit === "fixture" &&
+              source === "./sdk-loader" &&
+              importer?.endsWith(
+                "/src/music/providers/apple-music/browser/index.ts",
+              )
+            )
+              return resolve("tests/support/musickit-sdk-loader.ts");
           },
         },
       ],
@@ -67,11 +81,18 @@ export async function startMusicHostQA() {
       build: { outDir: join(directory, "dist/server") },
     });
     server = await startServerProcess({
-      command: [
-        process.execPath,
-        resolve("tests/support/music-host-server-entry.ts"),
-        join(directory, "dist/server/main.js"),
-      ],
+      command: options.musicKit
+        ? [
+            process.execPath,
+            "--preload",
+            resolve("tests/support/itunes-preload.ts"),
+            join(directory, "dist/server/main.js"),
+          ]
+        : [
+            process.execPath,
+            resolve("tests/support/music-host-server-entry.ts"),
+            join(directory, "dist/server/main.js"),
+          ],
       env: {
         ...process.env,
         PORT: "0",
@@ -79,6 +100,32 @@ export async function startMusicHostQA() {
         DATABASE_URL: `file:${join(directory, "qa.sqlite")}`,
         ADMIN_TOKEN: "qa-local-only",
         DEVICE_COOKIE_SECRET: "qa-local-only",
+        ...(options.musicKit
+          ? {
+              MUSIC_PROVIDER: "apple-music",
+              MUSIC_PLAYBACK_MODE: "musickit",
+              PLAYBACK_DISABLED: "0",
+              MUSICKIT_DEVELOPER_TOKEN:
+                options.token === "invalid"
+                  ? "invalid"
+                  : options.token === "missing" ||
+                      options.musicKit === "production"
+                    ? ""
+                    : [
+                        Buffer.from(
+                          JSON.stringify({ alg: "ES256", kid: "QA" }),
+                        ).toString("base64url"),
+                        Buffer.from(
+                          JSON.stringify({
+                            iss: "QA",
+                            iat: 1,
+                            exp: options.token === "expired" ? 2 : 4102444800,
+                          }),
+                        ).toString("base64url"),
+                        Buffer.alloc(64).toString("base64url"),
+                      ].join("."),
+            }
+          : {}),
       },
     });
     const upstream = server.url;

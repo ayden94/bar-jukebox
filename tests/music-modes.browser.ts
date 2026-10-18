@@ -4,8 +4,16 @@ import { resolve } from "node:path";
 import type { PlaybackSnapshot } from "../src/domains/playback/protocol";
 import { armCondition, expectCondition } from "./support/browser-lifecycle";
 import { startMusicHostQA } from "./support/music-host-qa";
+import { runMusicKitScenario } from "./support/musickit-browser-scenarios";
 
-const supported = ["persistent-host", "duplicate-tab"] as const;
+// allow: SIZE_OK — 기존 두 host 시나리오는 하나의 owner/채널/복구 fixture 수명을 공유해요.
+const supported = [
+  "persistent-host",
+  "duplicate-tab",
+  "musickit-adapter",
+  "musickit-auth-failure",
+  "musickit-missing-token",
+] as const;
 const args = process.argv.slice(2);
 if (
   args.length !== 0 &&
@@ -17,6 +25,19 @@ if (
 const scenarios = args.length
   ? supported.filter((id) => id === args[1])
   : supported;
+const hostScenarios = scenarios.filter(
+  (id) => id === "persistent-host" || id === "duplicate-tab",
+);
+const musicKitScenarios = scenarios.filter(
+  (id) =>
+    id === "musickit-adapter" ||
+    id === "musickit-auth-failure" ||
+    id === "musickit-missing-token",
+);
+if (!hostScenarios.length) {
+  for (const scenario of musicKitScenarios) await runMusicKitScenario(scenario);
+  process.exit(0);
+}
 const evidence = resolve(".omo/evidence/boot-selected-music-playback/task-5");
 await mkdir(evidence, { recursive: true });
 const qa = await startMusicHostQA();
@@ -41,7 +62,12 @@ async function click(
   await armCondition(view, condition);
   await view.click(selector);
   await expectCondition(view, label);
-  actions.push({ action: "click", selector, assertion: label, result: "PASS" });
+  actions.push({
+    action: "click",
+    selector,
+    assertion: label,
+    result: "PASS",
+  });
 }
 
 async function open(width = 1280, height = 900) {
@@ -167,7 +193,7 @@ try {
       2,
     ),
   );
-  for (const scenario of scenarios) {
+  for (const scenario of hostScenarios) {
     activeScenario = scenario;
     const first = await open();
     assert.equal(await first.evaluate("window.__hostQA.provider.length"), 0);
@@ -413,3 +439,4 @@ try {
     ),
   );
 }
+for (const scenario of musicKitScenarios) await runMusicKitScenario(scenario);
