@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import type { PlaybackSnapshot } from "../src/domains/playback/protocol";
 import { armCondition, expectCondition } from "./support/browser-lifecycle";
 import { startMusicHostQA } from "./support/music-host-qa";
+import { runSetupScenario } from "./support/music-setup-browser-scenarios";
 import { runMusicKitScenario } from "./support/musickit-browser-scenarios";
 
 // allow: SIZE_OK — 기존 두 host 시나리오는 하나의 owner/채널/복구 fixture 수명을 공유해요.
@@ -13,6 +14,8 @@ const supported = [
   "musickit-adapter",
   "musickit-auth-failure",
   "musickit-missing-token",
+  "settings-restart",
+  "connection-errors",
 ] as const;
 const args = process.argv.slice(2);
 if (
@@ -25,6 +28,10 @@ if (
 const scenarios = args.length
   ? supported.filter((id) => id === args[1])
   : supported;
+for (const scenario of scenarios) {
+  if (scenario === "settings-restart" || scenario === "connection-errors")
+    await runSetupScenario(scenario);
+}
 const hostScenarios = scenarios.filter(
   (id) => id === "persistent-host" || id === "duplicate-tab",
 );
@@ -59,7 +66,21 @@ async function click(
   condition: string,
   label: string,
 ) {
+  if (
+    await view.evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    return !!element?.closest("details:not([open])");
+  })()`)
+  ) {
+    await view.evaluate(
+      'document.querySelector("section[data-preparation] details > summary")?.scrollIntoView({block:"center"})',
+    );
+    await view.click("section[data-preparation] details > summary");
+  }
   await armCondition(view, condition);
+  await view.evaluate(
+    `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:"center"})`,
+  );
   await view.click(selector);
   await expectCondition(view, label);
   actions.push({
@@ -86,7 +107,7 @@ async function open(width = 1280, height = 900) {
   });
   await armCondition(
     view,
-    '!!document.querySelector("#admin-password") || !!document.querySelector("#browser-music-connect")',
+    '!!document.querySelector("#admin-password") || !!document.querySelector("[data-preparation]")',
   );
   await expectCondition(view, "production 문서가 표시돼요");
   if (await view.evaluate('!localStorage.getItem("bj_admin")')) {
@@ -100,23 +121,32 @@ async function open(width = 1280, height = 900) {
     await click(
       view,
       'button[type="submit"]',
-      '!!document.querySelector("#browser-music-connect")',
+      '!!document.querySelector("[data-preparation]")',
       "관리자 인증 후 선택된 브라우저 연결 제어가 보여요",
     );
   }
   await armCondition(
     view,
-    '!!window.__hostQA && !!document.querySelector("#browser-music-connect")',
+    '!!window.__hostQA && !!document.querySelector("[data-preparation]") && document.querySelector("[data-preparation]").dataset.preparation !== "unknown"',
   );
   await expectCondition(view, "QA 관측과 실제 연결 제어가 준비돼요");
   return view;
 }
 
 async function connect(view: Bun.WebView) {
+  if (
+    !(await view.evaluate('!!document.querySelector("#browser-music-connect")'))
+  )
+    await click(
+      view,
+      "#browser-music-refresh",
+      '!!document.querySelector("#browser-music-connect") && document.querySelector("#browser-music-connect")?.disabled === false',
+      "현재 owner 해제를 다시 확인한 뒤 연결해요",
+    );
   await click(
     view,
     "#browser-music-connect",
-    `${phase("connected")} && !document.querySelector("#browser-music-disconnect").disabled`,
+    `${phase("connected")} && !!document.querySelector("#browser-music-disconnect")`,
     "명시적 연결 후에만 이 문서가 owner가 돼요",
   );
   const current = await snapshot();
@@ -128,7 +158,7 @@ async function disconnect(view: Bun.WebView) {
   await click(
     view,
     "#browser-music-disconnect",
-    `${phase("disconnected")} && !document.querySelector("#browser-music-connect").disabled`,
+    `${phase("disconnected")} && document.querySelector("#browser-music-connect")?.disabled === false`,
     "정지 관측과 서버 해제 뒤에만 연결 해제를 표시해요",
   );
   const current = await snapshot();
@@ -142,6 +172,17 @@ async function disconnect(view: Bun.WebView) {
 }
 
 async function recover(view: Bun.WebView) {
+  if (
+    await view.evaluate(
+      '!!document.querySelector("#browser-music-recovery-open")',
+    )
+  )
+    await click(
+      view,
+      "#browser-music-recovery-open",
+      '!!document.querySelector("#browser-music-stopped") && document.querySelector("#browser-music-recovery-open")?.disabled === false',
+      "정상 연결 관측만으로 복구를 요구하지 않고 명시적으로 이전 연결 복구를 선택해요",
+    );
   const before = await snapshot();
   assert(before.owner && !before.owner.released);
   const reads = await view.evaluate<number>(
@@ -150,7 +191,7 @@ async function recover(view: Bun.WebView) {
   await click(
     view,
     "#browser-music-refresh",
-    `window.__hostQA.requests.filter(r => r.path === "/api/admin/playback/snapshot").length > ${reads} && !!document.querySelector("#browser-music-stopped") && !document.querySelector("#browser-music-refresh").disabled`,
+    `window.__hostQA.requests.filter(r => r.path === "/api/admin/playback/snapshot").length > ${reads} && !!document.querySelector("#browser-music-stopped") && document.querySelector("#browser-music-refresh")?.disabled === false`,
     "미확인 owner의 현재 복구 fence를 읽어요",
   );
   await click(
@@ -162,7 +203,7 @@ async function recover(view: Bun.WebView) {
   await click(
     view,
     "#browser-music-recover",
-    '!document.querySelector("#browser-music-stopped") && !document.querySelector("#browser-music-connect").disabled',
+    '!document.querySelector("#browser-music-stopped") && document.querySelector("#browser-music-connect")?.disabled === false',
     "실제 정지 확인은 browser 전용 복구 계약으로 권한을 해제해요",
   );
   const request = qa.requests
@@ -238,7 +279,7 @@ try {
       await first.navigate(`${qa.url}/admin/music`);
       await armCondition(
         first,
-        '!!document.querySelector("#browser-music-connect") && !!window.__hostQA',
+        '!!document.querySelector("[data-preparation]") && !!window.__hostQA',
       );
       await expectCondition(first, "reload 문서는 자동 연결하지 않아요");
       assert.equal(
@@ -267,11 +308,17 @@ try {
       );
     } else {
       const second = await open();
-      await click(
-        second,
-        "#browser-music-connect",
-        `${phase("unknown")} && !document.querySelector("#browser-music-connect").disabled`,
-        "두 번째 문서는 기존 owner를 빼앗지 못해요",
+      assert.equal(
+        await second.evaluate(
+          'document.querySelector("[data-preparation]")?.dataset.preparation',
+        ),
+        "controller",
+      );
+      assert.equal(
+        await second.evaluate(
+          '!!document.querySelector("#browser-music-connect")',
+        ),
+        false,
       );
       assert.equal((await snapshot()).owner?.executorSessionId, id);
       assert.equal(
@@ -315,7 +362,7 @@ try {
       await click(
         second,
         "#browser-music-disconnect",
-        `${phase("unknown")} && !document.querySelector("#browser-music-connect").disabled`,
+        `${phase("unknown")} && document.querySelector("[data-preparation]")?.dataset.preparation === "recovery-required"`,
         "해제 실패는 disconnected나 성공으로 바꾸지 않아요",
       );
       qa.setFailRelease(false);
