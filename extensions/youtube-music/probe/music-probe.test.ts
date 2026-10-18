@@ -354,3 +354,178 @@ test("autoplay가 새 곡을 먼저 노출한 state 0은 이전 occurrence의 �
     probe.dispose();
   }
 });
+
+for (const asynchronous of [false, true]) {
+  test(`load 명령 알림에서 ${asynchronous ? "비동기" : "동기"} 취소하면 native 호출과 확정을 막아요`, async () => {
+    const { api, probe } = fixture();
+    const controller = new AbortController();
+    let clears = 0;
+    let loads = 0;
+    const clear = api.clearQueue.bind(api);
+    const load = api.loadVideoById.bind(api);
+    api.clearQueue = () => {
+      clears++;
+      clear();
+    };
+    api.loadVideoById = (input) => {
+      loads++;
+      queueMicrotask(() => load(input));
+    };
+    const off = probe.subscribe(() => {
+      if (probe.log.at(-1)?.type === "command:load") {
+        if (asynchronous) queueMicrotask(() => controller.abort());
+        else controller.abort();
+      }
+    });
+    try {
+      await expect(
+        probe.load("7VYgrfWQ8Ss", "cancel-notification", controller.signal),
+      ).rejects.toThrow();
+
+      expect({ clears, loads }).toEqual({ clears: 0, loads: 0 });
+      load({ videoId: "7VYgrfWQ8Ss", startSeconds: 0 });
+      expect(probe.log.some((entry) => entry.type === "confirmed:load")).toBe(
+        false,
+      );
+      expect(probe.reconcile(probe.log.at(-1)?.binding).status).toBe("unknown");
+    } finally {
+      off();
+      probe.dispose();
+    }
+  });
+}
+
+for (const dispose of [false, true]) {
+  test(`load 정책 준비 중 ${dispose ? "dispose" : "취소"} 뒤 늦은 준비 결과는 native 호출을 재개하지 않아요`, async () => {
+    const { api, probe, queue, policy } = fixture();
+    const controller = new AbortController();
+    const entered = Promise.withResolvers<void>();
+    const prepared = Promise.withResolvers<void>();
+    const returned = Promise.withResolvers<void>();
+    const dispatch = queue.dispatch.bind(queue);
+    let clears = 0;
+    let loads = 0;
+    api.clearQueue = () => {
+      clears++;
+    };
+    api.loadVideoById = () => {
+      loads++;
+    };
+    queue.dispatch = (action) => {
+      dispatch(action);
+      if (action.type !== "SET_REPEAT") return;
+      entered.resolve();
+      return prepared.promise.then(() => {
+        returned.resolve();
+      });
+    };
+    const result = probe
+      .load("7VYgrfWQ8Ss", "cancel-policy", controller.signal)
+      .then(
+        (receipt) => ({ receipt }),
+        () => ({ receipt: null }),
+      );
+    try {
+      await entered.promise;
+
+      if (dispose) probe.dispose();
+      else controller.abort();
+      prepared.resolve();
+      await returned.promise;
+      expect(await result).toEqual({ receipt: null });
+      expect({ clears, loads }).toEqual({ clears: 0, loads: 0 });
+      expect(policy.autoplay).toBe(true);
+      expect(probe.log.some((entry) => entry.type === "confirmed:load")).toBe(
+        false,
+      );
+      expect(probe.reconcile(probe.log.at(-1)?.binding).status).toBe("unknown");
+    } finally {
+      prepared.resolve();
+      probe.dispose();
+    }
+  });
+}
+
+test("clearQueue에서 취소되면 이어지는 load를 막고 이전 binding을 무효화해요", async () => {
+  const { api, probe, signal } = fixture();
+  const loaded = await probe.load("4D7u5KF7SP8", "healthy", signal);
+  const controller = new AbortController();
+  let loads = 0;
+  const clear = api.clearQueue.bind(api);
+  api.clearQueue = () => {
+    clear();
+    controller.abort();
+  };
+  api.loadVideoById = () => {
+    loads++;
+  };
+  try {
+    await expect(
+      probe.restart("cancel-clear", controller.signal),
+    ).rejects.toThrow();
+
+    expect(loads).toBe(0);
+    expect(probe.reconcile(loaded.binding).status).toBe("unknown");
+    expect(probe.log.some((entry) => entry.type === "confirmed:restart")).toBe(
+      false,
+    );
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("native 발행 뒤 취소와 늦은 관측은 unknown이고 새 정상 명령만 확정해요", async () => {
+  const { api, probe, signal } = fixture();
+  const loaded = await probe.load("4D7u5KF7SP8", "healthy", signal);
+  const controller = new AbortController();
+  const load = api.loadVideoById.bind(api);
+  api.loadVideoById = (input) => {
+    controller.abort();
+    queueMicrotask(() => load(input));
+  };
+  try {
+    await expect(
+      probe.restart("cancel-native", controller.signal),
+    ).rejects.toThrow();
+
+    expect(probe.reconcile(loaded.binding).status).toBe("unknown");
+    expect(probe.log.some((entry) => entry.type === "confirmed:restart")).toBe(
+      false,
+    );
+    api.loadVideoById = load;
+    const healthy = await probe.load("7VYgrfWQ8Ss", "healthy-again", signal);
+    expect(healthy.type).toBe("confirmed:load");
+    expect(probe.reconcile(healthy.binding).status).toBe("match");
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("native 관측 구독에서 취소되면 이미 발행된 load도 확정하지 않아요", async () => {
+  const { api, probe } = fixture();
+  const controller = new AbortController();
+  const load = api.loadVideoById.bind(api);
+  let loads = 0;
+  api.loadVideoById = (input) => {
+    loads++;
+    queueMicrotask(() => load(input));
+  };
+  const off = probe.subscribe(() => {
+    if (probe.log.at(-1)?.type === "state:1") controller.abort();
+  });
+  try {
+    await expect(
+      probe.load("7VYgrfWQ8Ss", "cancel-observation", controller.signal),
+    ).rejects.toThrow();
+
+    expect(loads).toBe(1);
+    expect(probe.read().videoId).toBe("7VYgrfWQ8Ss");
+    expect(probe.log.some((entry) => entry.type === "confirmed:load")).toBe(
+      false,
+    );
+    expect(probe.reconcile(probe.log.at(-1)?.binding).status).toBe("unknown");
+  } finally {
+    off();
+    probe.dispose();
+  }
+});

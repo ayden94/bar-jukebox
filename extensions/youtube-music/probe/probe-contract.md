@@ -42,6 +42,7 @@ const probe = createMusicProbe({
 
 - binding은 `{runId, documentId, attempt, videoId, cpn}`이에요. 모든 로그에 sequence, commandId, binding과 관측 상태가 있어요.
 - 명령은 native 호출 전에 구독하고 최대 15초 동안 실제 상태를 기다려요. 취소·timeout·예외는 결과 불명이며 자동 재전송하지 않아요.
+- 취소 구독과 pending 소유권은 `command:*` 알림보다 먼저 등록해요. 정책 준비를 기다린 뒤와 각 native 부작용 직전에 같은 명령·signal·dispose 상태를 확인해요. 발행 전 취소는 `clearQueue`와 load를 막고, 발행 후 취소는 이미 발생한 효과를 되돌렸다고 주장하지 않으며 binding을 unknown으로 남겨요. 늦은 준비 결과나 관측은 취소된 명령을 확정하거나 새 pending 명령을 정리하지 못해요.
 - load/restart는 exact ref, 새 cpn, state 1, paused false, 광고 없음과 안전한 Music 정책을 확인해야 확정해요. restart는 같은 ref라도 새 attempt/cpn이에요.
 - pause/resume은 같은 occurrence를 유지해요. 이전 restart binding, 수동 변경, seek, 정책 drift, 오류는 unknown이에요.
 - stop의 cpn이 바뀌면 해당 명령 중 관측한 `emptied`, state 5, paused true, ended false, duration null, position 0을 함께 요구해요. 다른 occurrence가 일시정지한 것만으로 stop을 확정하지 않아요.

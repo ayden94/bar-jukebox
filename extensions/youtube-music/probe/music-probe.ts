@@ -256,9 +256,9 @@ export function createMusicProbe({
       throw new Error("Music 대기열의 마지막 항목에서만 실증할 수 있어요");
     }
     commandId = id;
-    record(`command:${kind}`);
     return new Promise<ReturnType<typeof record>>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout>;
+      let issued = false;
       const cleanup = () => {
         clearTimeout(timer);
         subscribers.delete(check);
@@ -266,14 +266,18 @@ export function createMusicProbe({
         pending = null;
       };
       const fail = (reason: string) => {
+        if (pending !== cancel) return;
         cleanup();
         invalidated = true;
         reject(new Error(reason));
       };
       const cancel = () => fail("명령이 취소되어 결과를 확정할 수 없어요");
+      const active = () => pending === cancel && !disposed && !signal.aborted;
       const check = () => {
+        if (!active() || !issued) return;
         const current = read();
         if (
+          !active() ||
           current.videoId !== targetId ||
           !current.cpn ||
           current.adState !== -1 ||
@@ -328,33 +332,43 @@ export function createMusicProbe({
       subscribers.add(check);
       signal.addEventListener("abort", cancel, { once: true });
       timer = setTimeout(() => fail("명령 관측 제한 시간을 넘겼어요"), 15_000);
-      try {
+      const issue = async () => {
+        record(`command:${kind}`);
+        if (!active()) return;
         if (createsOccurrence) {
           policyTransition = true;
           policyOwned = true;
           try {
-            queue.dispatch({ type: "SET_REPEAT", payload: "NONE" });
-            queue.dispatch({ type: "SET_AUTOPLAY_ENABLED", payload: false });
+            await queue.dispatch({ type: "SET_REPEAT", payload: "NONE" });
+            if (!active()) return;
+            await queue.dispatch({
+              type: "SET_AUTOPLAY_ENABLED",
+              payload: false,
+            });
           } finally {
             policyTransition = false;
           }
+          if (!active()) return;
           if (!safePolicy(read())) {
             fail("Music 반복·자동재생 정책을 확인할 수 없어요");
             return;
           }
           // 이전 자동재생에서 남은 gapless successor도 제거해요.
+          if (!active()) return;
           api.clearQueue();
+          if (!active()) return;
+          issued = true;
           api.loadVideoById({ videoId: targetId!, startSeconds: 0 });
-        } else if (kind === "pause") {
-          api.pauseVideo();
-        } else if (kind === "resume") {
-          api.playVideo();
         } else {
-          api.stopVideo();
+          issued = true;
+          if (kind === "pause") api.pauseVideo();
+          else if (kind === "resume") api.playVideo();
+          else api.stopVideo();
         }
-      } catch {
+      };
+      void issue().catch(() => {
         fail("native 명령을 발행한 뒤 결과를 확정할 수 없어요");
-      }
+      });
     });
   }
 
