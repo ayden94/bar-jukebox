@@ -180,6 +180,7 @@ test("팩토리: 초기화와 descriptor는 네트워크나 프로세스를 실�
 
   expect(appleMusicDescriptor.modes.map((mode) => mode.modeId)).toEqual([
     "applescript",
+    "musickit",
   ]);
   expect(instance.scripts).toEqual([]);
   expect(instance.urls).toEqual([]);

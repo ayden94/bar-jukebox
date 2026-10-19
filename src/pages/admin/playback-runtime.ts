@@ -1,3 +1,4 @@
+import type { BrowserCatalogRequest } from "../../domains/music/browser-catalog-protocol";
 import type { BrowserPlaybackMessage } from "../../domains/playback/browser-playback-bridge";
 import type {
   PlaybackOwner,
@@ -15,6 +16,7 @@ import { type PlaybackFetcher, playbackEvents } from "./playback-channel";
 
 export type BrowserPlaybackSnapshot = PlaybackSnapshot & {
   messages: BrowserPlaybackMessage[];
+  catalogRequests: BrowserCatalogRequest[];
 };
 
 type RuntimeOptions = {
@@ -23,6 +25,8 @@ type RuntimeOptions = {
   connection: ConnectedTarget;
   fetcher?: PlaybackFetcher;
   onSnapshot?: (snapshot: BrowserPlaybackSnapshot) => void;
+  onCatalogSnapshot?: (snapshot: BrowserPlaybackSnapshot) => void;
+  onCatalogDisconnect?: () => void;
   onDisconnected?: (error: unknown) => void;
 };
 
@@ -33,6 +37,8 @@ export class BrowserPlaybackExecutor {
   private readonly fetcher: PlaybackFetcher;
   private owner: PlaybackOwner | null = null;
   private accepting = false;
+  private releasing = false;
+  private released = false;
   private disposed: Promise<void> | null = null;
   private latestContext: PlaybackContext | null = null;
   private commands = Promise.resolve();
@@ -54,7 +60,7 @@ export class BrowserPlaybackExecutor {
         "x-admin-token": this.options.token,
       },
       body: JSON.stringify(body),
-      signal: this.abort.signal,
+      signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(15000)]),
     });
     if (!response.ok)
       throw new Error(`재생 실행기 요청 실패 (${response.status})`);
@@ -119,6 +125,17 @@ export class BrowserPlaybackExecutor {
           throw new Error("재생 스냅샷 형식이 올바르지 않아요");
         }
         this.options.onSnapshot?.(snapshot);
+        this.options.onCatalogSnapshot?.(snapshot);
+        if (
+          this.releasing &&
+          snapshot.owner?.ownerEpoch === this.owner?.ownerEpoch &&
+          snapshot.owner?.executorSessionId === this.executorSessionId &&
+          snapshot.owner.released
+        ) {
+          // release 응답보다 SSE가 먼저 도착해도 요청을 취소하지 않아요.
+          this.accepting = false;
+          continue;
+        }
         if (
           snapshot.owner?.ownerEpoch !== this.owner?.ownerEpoch ||
           snapshot.owner?.executorSessionId !== this.executorSessionId ||
@@ -287,14 +304,38 @@ export class BrowserPlaybackExecutor {
     void this.dispose();
   }
 
+  async release(): Promise<void> {
+    if (this.releasing || !this.accepting || this.abort.signal.aborted)
+      throw new Error(
+        "연결이 끊겨 정지를 확인할 수 없어요. 실제 정지 후 확인해주세요.",
+      );
+    this.releasing = true;
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    try {
+      // 서버가 stop 명령의 receipt와 관측을 받는 동안 채널을 유지해요.
+      const result = await this.post("release", this.identity());
+      if (
+        !result ||
+        typeof result !== "object" ||
+        !("ok" in result) ||
+        result.ok !== true
+      )
+        throw new Error("재생 기기 해제를 확인하지 못했어요.");
+      this.released = true;
+    } finally {
+      await this.dispose();
+    }
+  }
+
   dispose(): Promise<void> {
     if (this.disposed) return this.disposed;
     this.accepting = false;
+    this.options.onCatalogDisconnect?.();
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.abort.abort();
     this.disposed = (async () => {
       // 네트워크 상실은 정지 증거가 아니에요. 가능한 로컬 정리만 시도해요.
-      if (this.latestContext) {
+      if (this.latestContext && !this.released) {
         try {
           await this.options.playback.execute(
             {

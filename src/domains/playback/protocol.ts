@@ -63,6 +63,10 @@ export type PlaybackFence = OwnerIdentity & {
   attemptId: string | null;
 };
 
+export type BrowserStoppedFence = PlaybackFence & {
+  songId: string | null;
+};
+
 // 관리자 전용이에요. public state/SSE에 이 자료를 합치지 않아요.
 export type PlaybackSnapshot = {
   owner: PlaybackOwner | null;

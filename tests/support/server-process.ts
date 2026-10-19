@@ -2,6 +2,7 @@ type ServerProcessOptions = {
   readonly command: string[];
   readonly env: Record<string, string | undefined>;
   readonly timeoutMs?: number;
+  readonly onMessage?: (message: unknown) => void;
 };
 
 // IPC 구독을 spawn 옵션으로 등록해 빠른 시작도 놓치지 않아요.
@@ -14,6 +15,7 @@ export async function startServerProcess(options: ServerProcessOptions) {
     stdout: "pipe",
     stderr: "pipe",
     ipc(message: unknown) {
+      options.onMessage?.(message);
       if (
         typeof message !== "object" ||
         message === null ||
@@ -66,7 +68,9 @@ export async function startServerProcess(options: ServerProcessOptions) {
     const port = await ready.promise;
     return {
       url: `http://127.0.0.1:${port}`,
+      pid: child.pid,
       stop,
+      send: (message: unknown) => child.send(message),
       get output() {
         return output;
       },

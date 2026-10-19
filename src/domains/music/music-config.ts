@@ -1,3 +1,4 @@
+import { musicModeUnavailableReason } from "../../music/availability";
 import type { ProviderDescriptor } from "../../music/contracts";
 
 export type MusicConfig = {
@@ -14,6 +15,34 @@ export type MusicRegistration = {
     readonly unavailableReason: string | null;
   }[];
 };
+
+export function registerMusicDescriptors(
+  descriptors: readonly ProviderDescriptor[],
+  platform: string,
+): readonly MusicRegistration[] {
+  return descriptors.map((descriptor) => ({
+    descriptor,
+    modes: descriptor.modes.map((mode) => {
+      const native =
+        descriptor.providerId === "apple-music" &&
+        mode.modeId === "applescript";
+      const unavailableReason = musicModeUnavailableReason(
+        { providerId: descriptor.providerId, modeId: mode.modeId },
+        platform,
+      );
+      return {
+        modeId: mode.modeId,
+        displayName: native
+          ? "이 Mac의 Music 앱"
+          : mode.modeId === "musickit"
+            ? "이 브라우저의 Apple Music"
+            : "연결한 YouTube Music 탭",
+        available: unavailableReason === null,
+        unavailableReason,
+      };
+    }),
+  }));
+}
 
 type ConfigSource = "environment" | "saved" | "default" | "unset";
 

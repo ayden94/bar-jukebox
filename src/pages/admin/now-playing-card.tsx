@@ -231,7 +231,9 @@ function StoppedConfirmation({
       <legend className="font-bold">재생 상태 확인</legend>
       <p className={admin.note}>
         음악 앱이나 재생 기기에서 오디오를 직접 멈춘 뒤 확인해주세요. 확인하면
-        현재 신청을 마치고 다음 곡으로 넘어가요.
+        {fence?.browser
+          ? "현재 신청과 재생 권한을 해제해요. 음악 연결에서 새로 연결해주세요."
+          : "현재 신청을 마치고 다음 곡으로 넘어가요."}
       </p>
       <p className={admin.note} role="status">
         {recovery?.pending

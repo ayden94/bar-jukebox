@@ -5,6 +5,12 @@ export type RecoveryFence = {
   readonly expectedSongId: string;
   readonly expectedAttemptId: string | null;
   readonly expectedOwnerEpoch: number;
+  readonly browser?: {
+    readonly ownerEpoch: number;
+    readonly executorSessionId: string;
+    readonly attemptId: string;
+    readonly songId: string;
+  };
 };
 
 type AdminApi = (path: string, options?: RequestInit) => Promise<Response>;
@@ -47,10 +53,34 @@ export async function captureRecoveryFence(
       "재생 주체 정보를 읽지 못했어요. 상태를 다시 확인해주세요.",
     );
   }
+  const browser =
+    record(owner) &&
+    record(owner.connection) &&
+    owner.connection.location === "browser";
+  if (
+    browser &&
+    (typeof owner.executorSessionId !== "string" ||
+      !owner.executorSessionId ||
+      !record(attempt) ||
+      typeof attempt.attemptId !== "string")
+  )
+    throw new Error(
+      "브라우저 재생 확인 정보가 없어요. 음악 연결에서 다시 확인해주세요.",
+    );
   return {
     expectedSongId: songId,
     expectedAttemptId: attempt === null ? null : String(attempt.attemptId),
     expectedOwnerEpoch: owner === null ? 0 : Number(owner.ownerEpoch),
+    ...(browser && record(attempt)
+      ? {
+          browser: {
+            ownerEpoch: Number(owner.ownerEpoch),
+            executorSessionId: String(owner.executorSessionId),
+            attemptId: String(attempt.attemptId),
+            songId,
+          },
+        }
+      : {}),
   };
 }
 

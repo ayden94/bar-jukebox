@@ -47,7 +47,11 @@ export const lifecycleProbe = `(() => {
 })();`;
 
 // 조건을 먼저 구독한 뒤 호출자가 클릭·네트워크 변경을 실행해요.
-export async function armCondition(browser: Bun.WebView, condition: string) {
+export async function armCondition(
+  browser: Bun.WebView,
+  condition: string,
+  timeoutMs = 10000,
+) {
   await browser.evaluate(`(() => {
     window.__condition = new Promise(resolve => {
       const finish = ok => {
@@ -57,7 +61,7 @@ export async function armCondition(browser: Bun.WebView, condition: string) {
       };
       const check = () => { if (${condition}) finish(true); };
       const observer = new MutationObserver(check);
-      const timeout = setTimeout(() => finish(false), 10000);
+      const timeout = setTimeout(() => finish(false), ${timeoutMs});
       observer.observe(document, { childList: true, subtree: true, attributes: true, characterData: true });
       window.addEventListener("qa-lifecycle", check);
       check();

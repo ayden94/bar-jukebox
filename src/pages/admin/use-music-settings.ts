@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectionTarget } from "../../music/contracts";
 import type { MusicSnapshot } from "./music-types";
 
@@ -6,6 +6,7 @@ type AdminApi = (path: string, options?: RequestInit) => Promise<Response>;
 
 export function useMusicSettings(api: AdminApi) {
   const [snapshot, setSnapshot] = useState<MusicSnapshot | null>(null);
+  const [fresh, setFresh] = useState(false);
   const [targets, setTargets] = useState<readonly ConnectionTarget[]>([]);
   const [pending, setPending] = useState(false);
   const [mutating, setMutating] = useState(false);
@@ -24,11 +25,15 @@ export function useMusicSettings(api: AdminApi) {
       lifetime.current.signal,
     ]);
     setPending(true);
+    setFresh(false);
     setError("");
     try {
       const response = await api("/api/admin/music", { signal });
       const data: MusicSnapshot = await response.json();
-      if (!signal.aborted) setSnapshot(data);
+      if (!signal.aborted) {
+        setSnapshot(data);
+        setFresh(true);
+      }
     } catch (failure) {
       if (!signal.aborted) {
         setError(
@@ -47,63 +52,65 @@ export function useMusicSettings(api: AdminApi) {
     const controller = new AbortController();
     lifetime.current = controller;
     void refresh();
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
     return () => {
       controller.abort();
       request.current?.abort();
       request.current = null;
       lifetime.current = null;
-      window.removeEventListener("focus", onFocus);
     };
   }, [refresh]);
 
-  async function act(path: string, body?: unknown): Promise<boolean> {
-    if (request.current || !lifetime.current) return false;
-    const controller = new AbortController();
-    request.current = controller;
-    const signal = AbortSignal.any([
-      controller.signal,
-      lifetime.current.signal,
-    ]);
-    setPending(true);
-    setMutating(true);
-    setError("");
-    setMessage("");
-    try {
-      const response = await api(`/api/admin/music${path}`, {
-        method: "POST",
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal,
-      });
-      const data: MusicSnapshot = await response.json();
-      if (signal.aborted) return false;
-      setSnapshot(data);
-      setMessage(
-        path === "/config"
-          ? "다음 시작 설정을 저장했어요. 적용하려면 서버를 다시 시작해주세요."
-          : "연결 상태를 확인했어요.",
-      );
-      return true;
-    } catch (failure) {
-      if (!signal.aborted) {
-        setError(
-          failure instanceof Error
-            ? failure.message
-            : "처리 결과를 확인하지 못했어요. 상태를 새로고침해주세요.",
+  const act = useCallback(
+    async (path: string, body?: unknown): Promise<boolean> => {
+      if (request.current || !lifetime.current) return false;
+      const controller = new AbortController();
+      request.current = controller;
+      const signal = AbortSignal.any([
+        controller.signal,
+        lifetime.current.signal,
+      ]);
+      setPending(true);
+      setMutating(true);
+      setFresh(false);
+      setError("");
+      setMessage("");
+      try {
+        const response = await api(`/api/admin/music${path}`, {
+          method: "POST",
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal,
+        });
+        const data: MusicSnapshot = await response.json();
+        if (signal.aborted) return false;
+        setSnapshot(data);
+        setFresh(true);
+        setMessage(
+          path === "/config"
+            ? "다음 시작 설정을 저장했어요. 적용하려면 서버를 다시 시작해주세요."
+            : "연결 상태를 확인했어요.",
         );
+        return true;
+      } catch (failure) {
+        if (!signal.aborted) {
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "처리 결과를 확인하지 못했어요. 상태를 새로고침해주세요.",
+          );
+        }
+        return false;
+      } finally {
+        if (request.current === controller) request.current = null;
+        if (!signal.aborted) {
+          setPending(false);
+          setMutating(false);
+        }
       }
-      return false;
-    } finally {
-      if (request.current === controller) request.current = null;
-      if (!signal.aborted) {
-        setPending(false);
-        setMutating(false);
-      }
-    }
-  }
+    },
+    [api],
+  );
 
-  async function loadTargets() {
+  const loadTargets = useCallback(async () => {
     if (request.current || !lifetime.current) return;
     const controller = new AbortController();
     request.current = controller;
@@ -128,17 +135,32 @@ export function useMusicSettings(api: AdminApi) {
       if (request.current === controller) request.current = null;
       if (!signal.aborted) setPending(false);
     }
-  }
+  }, [api]);
 
-  return {
-    snapshot,
-    targets,
-    pending,
-    mutating,
-    error,
-    message,
-    refresh,
-    act,
-    loadTargets,
-  };
+  return useMemo(
+    () => ({
+      snapshot,
+      fresh,
+      targets,
+      pending,
+      mutating,
+      error,
+      message,
+      refresh,
+      act,
+      loadTargets,
+    }),
+    [
+      snapshot,
+      fresh,
+      targets,
+      pending,
+      mutating,
+      error,
+      message,
+      refresh,
+      act,
+      loadTargets,
+    ],
+  );
 }
