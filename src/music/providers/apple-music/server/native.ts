@@ -83,6 +83,20 @@ function quote(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n").replaceAll("\r", "\\r")}"`;
 }
 
+// 카탈로그와 Music.app의 표기 차이(대소문자, 공백, 문장부호, 악센트, 유니코드 조합)를 무시해요.
+export function sameText(a: string, b: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .replace(/[\p{P}\p{S}\p{Z}\s]/gu, "");
+  return normalize(a) === normalize(b);
+}
+
+const lenient =
+  "ignoring case, diacriticals, hyphens, punctuation and white space";
+
 export function prepareScript(
   track: PreparedTrack,
   initialState: "playing" | "paused",
@@ -100,10 +114,12 @@ tell application "Music"
     set loaded to false
     repeat 80 times
       try
-        if ${track.album ? `album of current track is ${quote(track.album)} and ` : ""}track number of current track is 1 and disc number of current track is 1 then
-          set loaded to true
-          exit repeat
-        end if
+        ${lenient}
+          if ${track.album ? `album of current track is ${quote(track.album)} and ` : ""}track number of current track is 1 and disc number of current track is 1 then
+            set loaded to true
+          end if
+        end ignoring
+        if loaded then exit repeat
       end try
       delay 0.1
     end repeat
@@ -114,7 +130,10 @@ tell application "Music"
       if (current date) > deadline then error "track-timeout"
       set t to current track
       if track number of t is ${track.trackNumber} and disc number of t is ${track.discNumber} then
-        if name of t is not ${quote(track.metadata.title)} or artist of t is not ${quote(track.metadata.artist)}${track.album ? ` or album of t is not ${quote(track.album)}` : ""} then error "track-mismatch"
+        ${lenient}
+          set matches to (name of t is ${quote(track.metadata.title)} and artist of t is ${quote(track.metadata.artist)}${track.album ? ` and album of t is ${quote(track.album)}` : ""})
+        end ignoring
+        if not matches then error "track-mismatch"
         set found to true
         exit repeat
       end if
@@ -149,6 +168,76 @@ tell application "Music"
 end tell
 ${snapshotScript}`;
 }
+
+export const volumeScript = `-- jukebox:volume
+tell application "Music" to sound volume as text`;
+
+// 준비 스크립트가 중간에 끊겨 음소거가 남았을 때만 되돌려요. 직원이 바꾼 음량은 건드리지 않아요.
+export function restoreVolumeScript(volume: number): string {
+  return `-- jukebox:restore-volume
+tell application "Music"
+  if sound volume is 0 then set sound volume to ${Math.round(volume)}
+end tell`;
+}
+
+export function playlistsScript(): string {
+  return `-- jukebox:playlists
+tell application "Music"
+  set names to name of every user playlist whose special kind is none
+  set AppleScript's text item delimiters to ASCII character 31
+  return names as text
+end tell`;
+}
+
+export function startPlaylistScript(playlist: string): string {
+  return `-- jukebox:background-start
+tell application "Music"
+  set target to user playlist ${quote(playlist)}
+  set shuffle enabled to true
+  set song repeat to all
+  play target
+  return name of current playlist
+end tell`;
+}
+
+export function fadeOutScript(durationMs: number): string {
+  const steps = 10;
+  const delay = Math.max(0, durationMs / 1000 / steps).toFixed(2);
+  return `-- jukebox:background-fade
+tell application "Music"
+  if player state is not playing then return "stopped"
+  set originalVolume to sound volume
+  try
+    repeat with i from 1 to ${steps}
+      set sound volume to (originalVolume * (${steps} - i) / ${steps})
+      delay ${delay}
+    end repeat
+    stop
+    set sound volume to originalVolume
+  on error messageText number errorNumber
+    set sound volume to originalVolume
+    error messageText number errorNumber
+  end try
+  return "stopped"
+end tell`;
+}
+
+export const backgroundScript = `-- jukebox:background
+tell application "Music"
+  set s to player state as text
+  set p to ""
+  try
+    set p to name of current playlist
+  end try
+  try
+    set t to current track
+    set fields to {s, persistent ID of t as text, name of t, artist of t, p, player position as text, duration of t as text}
+  on error
+    set fields to {s, "", "", "", p, "", ""}
+  end try
+  set AppleScript's text item delimiters to ASCII character 31
+  return fields as text
+end tell`;
 
 export function controlScript(
   snapshot: NativeSnapshot,

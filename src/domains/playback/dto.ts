@@ -293,7 +293,8 @@ export function parseObservation(value: unknown): PlaybackObservation {
   if (state === "ended") {
     if (
       input.endReason !== "natural-end" &&
-      input.endReason !== "owned-advance"
+      input.endReason !== "owned-advance" &&
+      input.endReason !== "replaced"
     )
       invalid();
     return { ...common, state, endReason: input.endReason };

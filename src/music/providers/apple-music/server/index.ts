@@ -16,6 +16,7 @@ type AppleMusicServerOptions = {
   runScript?: ScriptRunner;
   platform?: string;
   disabled?: boolean;
+  country?: string;
   pollIntervalMs?: number;
   schedulePoll?: PollScheduler;
 };
@@ -36,7 +37,7 @@ export async function createAppleMusicServer(
     : (options.platform ?? process.platform) !== "darwin"
       ? "unsupported"
       : null;
-  const catalog = createAppleCatalog(options.fetch ?? fetch);
+  const catalog = createAppleCatalog(options.fetch ?? fetch, options.country);
   const runtime = createApplePlayback({
     runScript: options.runScript ?? runAppleScript,
     resolve: catalog.resolve,

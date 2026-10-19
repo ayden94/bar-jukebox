@@ -1,4 +1,5 @@
 export type { AuthAction, AuthPort, AuthState } from "./auth";
+export type { BackgroundObservation, BackgroundPort } from "./background";
 export type {
   ArtworkPort,
   ArtworkRef,

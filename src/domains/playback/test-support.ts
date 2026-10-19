@@ -260,11 +260,13 @@ export class FakePlayer implements PlaybackPort {
     this.deliver(this.current);
   }
 
-  end(): void {
+  end(
+    endReason: "natural-end" | "owned-advance" | "replaced" = "natural-end",
+  ): void {
     this.current = {
       ...this.current,
       state: "ended",
-      endReason: "natural-end",
+      endReason,
       sequence: ++this.sequence,
     };
     this.deliver(this.current);

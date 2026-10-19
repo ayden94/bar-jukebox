@@ -12,6 +12,9 @@ import {
   requiredPlaybackCapabilities,
   validateMusicProvider,
 } from "../music/registry";
+import { BackgroundRepository } from "./background/background.repository";
+import { BackgroundService } from "./background/background.service";
+import { BackgroundPlayer } from "./background/background-player";
 import { SseBroker } from "./events/sse-broker";
 import { BrowserCatalogBridge } from "./music/browser-catalog-bridge";
 import { MusicRepository } from "./music/music.repository";
@@ -40,6 +43,7 @@ export type RuntimeConfig = {
   playbackDisabled: boolean;
   platform?: string;
   musickitDeveloperToken?: string;
+  appleMusicCountry?: string;
   environment?: { MUSIC_PROVIDER?: string; MUSIC_PLAYBACK_MODE?: string };
   music?: {
     descriptor: ProviderDescriptor;
@@ -104,6 +108,7 @@ export async function createJukeboxRuntime(
           platform,
           musickitDeveloperToken,
           catalogTransport: catalogBridge,
+          appleMusicCountry: config.appleMusicCountry,
         },
         signal,
       );
@@ -151,6 +156,10 @@ export async function createJukeboxRuntime(
     history: await queueRepository.loadHistory(),
   });
   settingsService.hydrate(await settingsRepository.load());
+  const backgroundService = new BackgroundService(
+    new BackgroundRepository(database),
+  );
+  backgroundService.hydrate(await new BackgroundRepository(database).load());
   let connected: ConnectedTarget | null = null;
   const server =
     provider?.execution.location === "server"
@@ -186,6 +195,12 @@ export async function createJukeboxRuntime(
     } else connectionError = `음악 권한을 확인해주세요 (${auth.error.code})`;
   }
   const bridge = new BrowserPlaybackBridge();
+  const backgroundPlayer = new BackgroundPlayer(
+    connected && server?.background && !config.playbackDisabled
+      ? server.background
+      : null,
+    backgroundService,
+  );
   const playbackRepository = new PlaybackRepository(database);
   const playbackService = new PlaybackService(
     queueService,
@@ -196,7 +211,11 @@ export async function createJukeboxRuntime(
       onOwnerChange: (owner) => bridge.bindOwner(owner),
       onBrowserConnectionChange: (owner) => catalogBridge.bindOwner(owner),
       ...(provider && server && !config.playbackDisabled
-        ? { serverMode: provider.identity, serverConnection: server.connection }
+        ? {
+            serverMode: provider.identity,
+            serverConnection: server.connection,
+            background: backgroundPlayer,
+          }
         : {}),
       ...(provider?.execution.location === "browser" && !config.playbackDisabled
         ? { browserMode: provider.identity }
@@ -293,6 +312,8 @@ export async function createJukeboxRuntime(
   const providers = [
     { provide: QueueService, useValue: queueService },
     { provide: SettingsService, useValue: settingsService },
+    { provide: BackgroundService, useValue: backgroundService },
+    { provide: BackgroundPlayer, useValue: backgroundPlayer },
     { provide: TableService, useValue: tableService },
     { provide: SearchService, useValue: searchService },
     { provide: PlaybackService, useValue: playbackService },
@@ -308,6 +329,8 @@ export async function createJukeboxRuntime(
     queueRepository,
     queueService,
     settingsService,
+    backgroundService,
+    backgroundPlayer,
     searchService,
     playbackService,
     playbackRepository,

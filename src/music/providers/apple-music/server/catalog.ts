@@ -108,7 +108,12 @@ function parseTrack(raw: unknown): PreparedTrack | null {
   };
 }
 
-export function createAppleCatalog(fetcher: AppleFetch) {
+// 매장 계정의 storefront와 같은 국가로 조회해야 Music.app과 곡 정보가 맞아요.
+export function createAppleCatalog(fetcher: AppleFetch, country?: string) {
+  const storefront =
+    country && /^[a-z]{2}$/i.test(country)
+      ? `&country=${country.toLowerCase()}`
+      : "";
   const prepared = new Map<string, PreparedTrack>();
   const artworkCache = new Map<
     string,
@@ -184,7 +189,7 @@ export function createAppleCatalog(fetcher: AppleFetch) {
       return { ok: true, value: cached };
     }
     const response = await request(
-      `https://itunes.apple.com/lookup?id=${encodeURIComponent(ref.trackId)}&entity=song`,
+      `https://itunes.apple.com/lookup?id=${encodeURIComponent(ref.trackId)}&entity=song${storefront}`,
       signal,
     );
     if (!response.ok) {
@@ -211,7 +216,7 @@ export function createAppleCatalog(fetcher: AppleFetch) {
         return { ok: false, error: { code: "unsupported" } };
       }
       const response = await request(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=200`,
+        `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=200${storefront}`,
         signal,
       );
       if (!response.ok) {

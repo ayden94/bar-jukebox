@@ -1,4 +1,6 @@
 import type {
+  BackgroundObservation,
+  BackgroundPort,
   ConnectedTarget,
   ConnectionPort,
   MusicErrorCode,
@@ -12,12 +14,19 @@ import type {
 import { appleMusicDescriptor } from "../index";
 import type { createAppleCatalog } from "./catalog";
 import {
+  backgroundScript,
   controlScript,
+  fadeOutScript,
   type NativeSnapshot,
   parseSnapshot,
+  playlistsScript,
   prepareScript,
+  restoreVolumeScript,
   type ScriptRunner,
+  sameText,
   snapshotScript,
+  startPlaylistScript,
+  volumeScript,
 } from "./native";
 
 export type PollScheduler = (
@@ -172,6 +181,8 @@ export function createApplePlayback(options: {
   let terminal: PlaybackObservation | null = null;
   let advancedNative: NativeSnapshot | null = null;
   let stopTarget: NativeSnapshot | null = null;
+  // 다른 곡으로 바뀐 뒤 정지 명령을 받은 상태예요. 그 곡은 멈추지 않아요.
+  let replaced = false;
   let isDisposed = false;
   let sequence = 0;
   let queue: Promise<unknown> = Promise.resolve();
@@ -290,6 +301,9 @@ export function createApplePlayback(options: {
     if (terminal) {
       return { ...terminal, sequence: ++sequence };
     }
+    if (replaced && owned) {
+      return observation(null, "stopped");
+    }
     let native: NativeSnapshot | null;
     try {
       native = parseSnapshot(await options.runScript(snapshotScript, signal));
@@ -373,6 +387,20 @@ export function createApplePlayback(options: {
       } catch {
         // 정지 결과를 모르면 완료 관측을 만들지 않아요.
       }
+    }
+    // 방금 소유 곡을 확인한 뒤 다른 곡이 실제로 재생 중이면(자동 추천, 직원 조작)
+    // 신청곡은 끝난 것이에요. 흐르는 음악은 멈추지 않고 다음 신청으로 넘어가요.
+    if (
+      native.state === "playing" &&
+      previous !== null &&
+      sameNative(previous, owned.native)
+    ) {
+      terminal = {
+        ...observation(previous, "unknown"),
+        state: "ended",
+        endReason: "replaced",
+      };
+      return terminal;
     }
     const lost = {
       ...observation(native, "unknown"),
@@ -473,6 +501,7 @@ export function createApplePlayback(options: {
         terminal = null;
         stopTarget = null;
         advancedNative = null;
+        replaced = false;
         return { ok: true, value: connected };
       });
     },
@@ -485,6 +514,7 @@ export function createApplePlayback(options: {
         owned = null;
         previous = null;
         terminal = null;
+        replaced = false;
         publish(observation(null, "unavailable", null));
         return { ok: true, value: undefined };
       });
@@ -526,12 +556,18 @@ export function createApplePlayback(options: {
           if (isDisposed) {
             return reject("disconnected");
           }
+          let volume: number | null = null;
           try {
             owned = null;
             previous = null;
             terminal = null;
             stopTarget = null;
             advancedNative = null;
+            replaced = false;
+            const current = Number(
+              await options.runScript(volumeScript, combined),
+            );
+            volume = Number.isFinite(current) && current > 0 ? current : null;
             const native = parseSnapshot(
               await options.runScript(
                 prepareScript(track.value, command.initialState),
@@ -540,10 +576,10 @@ export function createApplePlayback(options: {
             );
             if (
               !native ||
-              native.title !== track.value.metadata.title ||
-              native.artist !== track.value.metadata.artist ||
+              !sameText(native.title, track.value.metadata.title) ||
+              !sameText(native.artist, track.value.metadata.artist) ||
               (track.value.album !== "" &&
-                native.album !== track.value.album) ||
+                !sameText(native.album, track.value.album)) ||
               native.trackNumber !== track.value.trackNumber ||
               native.discNumber !== track.value.discNumber ||
               combined.aborted
@@ -560,6 +596,12 @@ export function createApplePlayback(options: {
               context: command.context,
             };
           } catch {
+            if (volume !== null) {
+              // 준비가 중간에 끊겨도 음소거로 남지 않게 해요.
+              await options
+                .runScript(restoreVolumeScript(volume), lifetime.signal)
+                .catch(() => undefined);
+            }
             return {
               status: "unknown",
               context: command.context,
@@ -575,6 +617,17 @@ export function createApplePlayback(options: {
               command.context.executorSessionId
           ) {
             return reject("disconnected");
+          }
+          if (
+            terminal?.state === "ended" &&
+            terminal.endReason === "replaced"
+          ) {
+            if (command.type !== "stop") return reject("disconnected");
+            // 이미 다른 곡이 흐르고 있어요. 그 곡을 멈추지 않고 완료만 확인해요.
+            owned.context = command.context;
+            terminal = null;
+            replaced = true;
+            return { status: "accepted", context: command.context };
           }
           if (
             command.type === "seek" &&
@@ -699,9 +752,139 @@ export function createApplePlayback(options: {
       owned = null;
       previous = null;
       terminal = null;
+      replaced = false;
     },
   };
-  return { connection, playback };
+
+  const notConnected = () =>
+    isDisposed || !connected
+      ? ({
+          ok: false,
+          error: { code: options.unavailable ?? "disconnected" },
+        } as const)
+      : null;
+
+  const background: BackgroundPort = {
+    listPlaylists(signal) {
+      return serialize(async () => {
+        signal.throwIfAborted();
+        const unavailable = notConnected();
+        if (unavailable) return unavailable;
+        try {
+          const output = await options.runScript(
+            playlistsScript(),
+            AbortSignal.any([signal, lifetime.signal]),
+          );
+          return {
+            ok: true,
+            value: [
+              ...new Set(
+                output
+                  .split("\x1f")
+                  .map((name) => name.trim())
+                  .filter(Boolean),
+              ),
+            ],
+          };
+        } catch {
+          signal.throwIfAborted();
+          return { ok: false, error: { code: "disconnected" } };
+        }
+      });
+    },
+    start(playlist, signal) {
+      return serialize(async () => {
+        signal.throwIfAborted();
+        const unavailable = notConnected();
+        if (unavailable) return unavailable;
+        // 신청곡을 재생 중이면 배경 음악으로 덮지 않아요.
+        if (owned && !replaced && !terminal && !stopTarget) {
+          return { ok: false, error: { code: "configuration" } };
+        }
+        try {
+          const current = await options.runScript(
+            startPlaylistScript(playlist),
+            AbortSignal.any([signal, lifetime.signal]),
+          );
+          owned = null;
+          previous = null;
+          terminal = null;
+          stopTarget = null;
+          advancedNative = null;
+          replaced = false;
+          return sameText(current, playlist)
+            ? { ok: true, value: undefined }
+            : { ok: false, error: { code: "unknown-outcome" } };
+        } catch {
+          signal.throwIfAborted();
+          return { ok: false, error: { code: "unknown-outcome" } };
+        }
+      });
+    },
+    fadeOut(durationMs, signal) {
+      return serialize(async () => {
+        signal.throwIfAborted();
+        const unavailable = notConnected();
+        if (unavailable) return unavailable;
+        try {
+          await options.runScript(
+            fadeOutScript(durationMs),
+            AbortSignal.any([signal, lifetime.signal]),
+          );
+          return { ok: true, value: undefined };
+        } catch {
+          signal.throwIfAborted();
+          return { ok: false, error: { code: "unknown-outcome" } };
+        }
+      });
+    },
+    observe(signal) {
+      return serialize(async () => {
+        signal.throwIfAborted();
+        const unavailable = notConnected();
+        if (unavailable) return unavailable;
+        try {
+          const parsed = parseBackground(
+            await options.runScript(
+              backgroundScript,
+              AbortSignal.any([signal, lifetime.signal]),
+            ),
+          );
+          return parsed
+            ? { ok: true, value: parsed }
+            : { ok: false, error: { code: "disconnected" } };
+        } catch {
+          signal.throwIfAborted();
+          return { ok: false, error: { code: "disconnected" } };
+        }
+      });
+    },
+  };
+  return { connection, playback, background };
+}
+
+function parseBackground(output: string): BackgroundObservation | null {
+  const fields = output.trim().split("\x1f");
+  const [state, key, title, artist, playlist, position, duration] = fields;
+  if (
+    fields.length !== 7 ||
+    (state !== "playing" && state !== "paused" && state !== "stopped")
+  ) {
+    return null;
+  }
+  const number = (text: string | undefined) => {
+    const parsed = text?.trim() ? Number(text) : Number.NaN;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+  return {
+    state,
+    trackKey: key || null,
+    title: title || null,
+    artist: artist || null,
+    playlist: playlist || null,
+    positionSec: number(position),
+    durationSec: number(duration),
+  };
 }
 
 function commandAction(

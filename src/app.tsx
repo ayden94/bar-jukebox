@@ -23,6 +23,9 @@ import { IsString } from "@fluojs/validation";
 import { AdminController } from "./domains/admin/admin.controller";
 import { AdminTokenGuard } from "./domains/admin/admin-token.guard";
 import { AdminPageDto } from "./domains/admin/dto";
+import { BackgroundController } from "./domains/background/background.controller";
+import { BackgroundService } from "./domains/background/background.service";
+import { BackgroundPlayer } from "./domains/background/background-player";
 import { EventsController } from "./domains/events/events.controller";
 import { SseBroker } from "./domains/events/sse-broker";
 import { BrowserCatalogBridge } from "./domains/music/browser-catalog-bridge";
@@ -293,6 +296,8 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
     exports: [
       QueueService,
       SettingsService,
+      BackgroundService,
+      BackgroundPlayer,
       TableService,
       SearchService,
       PlaybackService,
@@ -311,6 +316,7 @@ export function createJukeboxModule(options: CreateJukeboxModuleOptions) {
       TableController,
       SearchController,
       AdminController,
+      BackgroundController,
       MusicController,
       PlaybackController,
       EventsController,

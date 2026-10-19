@@ -1,5 +1,6 @@
 import type { Snapshot } from "../types";
 import { AddSong } from "./add-song";
+import { BackgroundPanel } from "./background-panel";
 import { NowPlayingCard } from "./now-playing-card";
 import { SettingsPanel } from "./settings-panel";
 import { HistoryList, QueueList } from "./song-list";
@@ -100,6 +101,7 @@ export function SongsTab({ snap, act, api }: SongsTabProps) {
               })
             }
           />
+          <BackgroundPanel snap={snap} api={api} />
           <SettingsPanel
             requestsPaused={snap?.requestsPaused ?? false}
             notice={snap?.notice}

@@ -1,4 +1,5 @@
 import type { AuthPort } from "./auth";
+import type { BackgroundPort } from "./background";
 import type { CatalogPort, ModeId, ProviderId } from "./catalog";
 import type {
   ConnectionPort,
@@ -29,6 +30,8 @@ export interface ProviderDescriptor {
 export interface PlaybackRuntime {
   readonly connection: ConnectionPort;
   readonly playback: PlaybackPort;
+  // 선택 기능이에요. 없으면 신청이 없을 때 아무것도 재생하지 않아요.
+  readonly background?: BackgroundPort;
 }
 
 export interface ServerMusicProvider {

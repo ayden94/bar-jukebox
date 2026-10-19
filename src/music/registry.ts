@@ -30,6 +30,7 @@ export type MusicServerOptions = {
   readonly platform: string;
   readonly musickitDeveloperToken?: string;
   readonly catalogTransport?: CatalogPort;
+  readonly appleMusicCountry?: string;
 };
 
 // 구현이 없는 조합도 등록은 유지해요. 선택된 공개 factory만 불러와요.
@@ -55,7 +56,10 @@ export async function loadMusicServer(
           "./providers/apple-music/server"
         );
         signal.throwIfAborted();
-        return createAppleMusicServer(options, signal);
+        return createAppleMusicServer(
+          { ...options, country: options.appleMusicCountry },
+          signal,
+        );
       }
       case "musickit": {
         const { createAppleMusicKitServer } = await import(

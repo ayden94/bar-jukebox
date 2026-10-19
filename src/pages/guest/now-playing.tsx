@@ -5,11 +5,17 @@ import { PlaybackSheet } from "./playback-sheet";
 
 type NowPlayingAreaProps = {
   np: NowPlayingView | null;
+  background?: { title: string; artist: string | null } | null;
   queue: SongView[];
   onCancel: (id: string) => void;
 };
 
-export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
+export function NowPlayingArea({
+  np,
+  background = null,
+  queue,
+  onCancel,
+}: NowPlayingAreaProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const npSong = np?.song ?? null;
@@ -49,6 +55,28 @@ export function NowPlayingArea({ np, queue, onCancel }: NowPlayingAreaProps) {
             <i />
           </div>
         </button>
+      ) : background ? (
+        <output
+          className="fixed bottom-[calc(8px+env(safe-area-inset-bottom))] left-1/2 z-20 flex min-h-15 w-[min(calc(100%-40px),600px)] -translate-x-1/2 items-center gap-[11px] rounded-[var(--guest-radius)] border border-[var(--guest-stroke)] bg-[var(--guest-surface)] px-4 py-[9px] text-[var(--guest-ink)] shadow-[var(--guest-shadow)] max-[420.001px]:w-[calc(100%-32px)]"
+          aria-label="매장 배경 음악"
+        >
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--guest-accent-wash)] text-lg text-[var(--guest-accent)]"
+            aria-hidden="true"
+          >
+            ♪
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.72rem] font-extrabold text-[var(--guest-accent)]">
+              매장 배경 음악
+            </span>
+            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[0.88rem] font-bold">
+              {background.artist
+                ? `${background.title} · ${background.artist}`
+                : background.title}
+            </span>
+          </span>
+        </output>
       ) : null}
       <PlaybackSheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
         {np && npSong ? (

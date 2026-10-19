@@ -40,6 +40,7 @@ export async function startJukebox(
   config: RuntimeConfig = {
     playbackDisabled: process.env.PLAYBACK_DISABLED === "1",
     musickitDeveloperToken: process.env.MUSICKIT_DEVELOPER_TOKEN,
+    appleMusicCountry: process.env.APPLE_MUSIC_COUNTRY,
     environment: {
       MUSIC_PROVIDER: process.env.MUSIC_PROVIDER,
       MUSIC_PLAYBACK_MODE: process.env.MUSIC_PLAYBACK_MODE,

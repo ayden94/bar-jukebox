@@ -18,6 +18,7 @@ function snapshot(notice: string): Snapshot {
     notice,
     maxPerDevice: 1,
     maxPerTable: 5,
+    background: null,
   };
 }
 
