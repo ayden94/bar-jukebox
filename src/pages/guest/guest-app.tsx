@@ -81,7 +81,12 @@ export function GuestApp({
         onRequested={refresh}
         showToast={showToast}
       />
-      <NowPlayingArea np={np} queue={queue} onCancel={cancel} />
+      <NowPlayingArea
+        np={np}
+        background={snap?.background ?? null}
+        queue={queue}
+        onCancel={cancel}
+      />
       {toast ? (
         <div
           className="fixed right-[max(12px,calc((100vw-612px)/2))] bottom-[calc(100px+env(safe-area-inset-bottom))] left-[max(12px,calc((100vw-612px)/2))] z-50 rounded-[14px] bg-[var(--guest-surface)] px-4 py-[13px] text-center text-sm text-[var(--guest-ink)] shadow-[var(--guest-shadow)] transition-[opacity,transform] duration-300"

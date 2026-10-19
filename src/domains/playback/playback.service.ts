@@ -27,6 +27,15 @@ import type {
 
 type Attempt = DurableAttempt & { song: Song };
 
+export type BackgroundHandoff = {
+  bind(ready: () => void): void;
+  idle(): Promise<void>;
+  beforeRequest(): Promise<boolean>;
+  startNow(): Promise<void>;
+  stopNow(): Promise<void>;
+  dispose(): void;
+};
+
 export type PlaybackServiceOptions = {
   stopConfirmationTimeoutMs?: number;
   heartbeatTimeoutMs?: number;
@@ -37,6 +46,8 @@ export type PlaybackServiceOptions = {
   browserMode?: { providerId: string; modeId: string };
   serverMode?: { providerId: string; modeId: string };
   serverConnection?: ConnectionPort;
+  // 서버 실행기에서만 써요. 신청이 없을 때 배경 음악을 맡겨요.
+  background?: BackgroundHandoff;
 };
 
 export class PlaybackService {
@@ -67,6 +78,7 @@ export class PlaybackService {
     private readonly options: PlaybackServiceOptions = {},
   ) {
     this.now = options.now ?? Date.now;
+    options.background?.bind(() => this.wake());
   }
 
   start(signal?: AbortSignal): Promise<void> {
@@ -139,6 +151,7 @@ export class PlaybackService {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.clearBrowserLease();
+    this.options.background?.dispose();
     this.abort.abort();
     this.stopConfirmation?.completion.reject(this.abort.signal.reason);
     this.stopConfirmation = null;
@@ -632,6 +645,30 @@ export class PlaybackService {
     });
   }
 
+  // 진행 중인 신청곡과 대기열이 모두 비었을 때만 배경 음악을 직접 켜거나 끌 수 있어요.
+  startBackground(): Promise<void> {
+    return this.command(async () => {
+      const background = this.idleBackground();
+      await background.startNow();
+    });
+  }
+
+  stopBackground(): Promise<void> {
+    return this.command(async () => {
+      const background = this.idleBackground();
+      await background.stopNow();
+    });
+  }
+
+  private idleBackground(): BackgroundHandoff {
+    const background = this.options.background;
+    if (!background || this.connection?.location !== "server")
+      throw new Error("이 재생 방식은 배경 음악을 지원하지 않아요");
+    if (this.queue.nowPlayingSong() || this.queue.snapshot().queue.length > 0)
+      throw new Error("신청곡이 있을 때는 배경 음악을 바꿀 수 없어요");
+    return background;
+  }
+
   private reserve(
     song: Song,
     type: "play" | "restart" = "play",
@@ -709,6 +746,17 @@ export class PlaybackService {
         !this.browserConnected(this.owner)
       )
         return;
+      const background =
+        this.owner.connection.location === "server"
+          ? this.options.background
+          : undefined;
+      if (background && this.queue.snapshot().queue.length === 0) {
+        await background.idle();
+        return;
+      }
+      // 배경곡이 끝날 때까지 기다리는 정책이면 끝난 뒤 bind한 wake가 다시 불려요.
+      if (background && !(await background.beforeRequest())) return;
+      if (this.abort.signal.aborted || this.queue.nowPlayingSong()) return;
       let reservation: PlaybackReservation | undefined;
       const song = await this.queue.takeAndStart((next) => {
         reservation = this.reserve(next);

@@ -17,6 +17,10 @@ export type SettingsStateView = {
   };
 };
 
+export type BackgroundStateView = {
+  now(): { title: string; artist: string | null } | null;
+};
+
 export function publicSong(song: Song, viewerId: string): PublicSong {
   return {
     formatVersion: song.formatVersion,
@@ -44,10 +48,12 @@ export function composeState(
   queue: QueueStateView,
   settings: SettingsStateView,
   viewerId: string,
+  background?: BackgroundStateView,
 ): JukeboxState {
   const snapshot = queue.snapshot();
   return {
     ...settings.read(),
+    background: snapshot.nowPlaying ? null : (background?.now() ?? null),
     nowPlaying: snapshot.nowPlaying
       ? {
           startedAt: snapshot.nowPlaying.startedAt,

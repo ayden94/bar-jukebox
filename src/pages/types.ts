@@ -39,6 +39,7 @@ export type Snapshot = {
   notice: string;
   maxPerDevice: number;
   maxPerTable: number;
+  background: { title: string; artist: string | null } | null;
 };
 
 export type SearchPage = {

@@ -7,6 +7,7 @@ import {
   type SseMessage,
 } from "@fluojs/http";
 import { deviceIdOf } from "../../middleware/device-cookie.middleware";
+import { BackgroundPlayer } from "../background/background-player";
 import type { JukeboxBus } from "../providers";
 import { JukeboxBusToken } from "../providers";
 import { QueueService } from "../queue/queue.service";
@@ -16,7 +17,13 @@ import { SseBroker } from "./sse-broker";
 
 class EventsDto {}
 
-@Inject(QueueService, SettingsService, SseBroker, JukeboxBusToken)
+@Inject(
+  QueueService,
+  SettingsService,
+  SseBroker,
+  JukeboxBusToken,
+  BackgroundPlayer,
+)
 @Controller()
 export class EventsController {
   constructor(
@@ -24,6 +31,7 @@ export class EventsController {
     private readonly settings: SettingsService,
     private readonly broker: SseBroker,
     bus: JukeboxBus,
+    private readonly background: BackgroundPlayer,
   ) {
     // 상태 변경/재생 진행률 갱신을 모든 SSE 연결에 알린다
     bus.onChange(() => this.broker.notify());
@@ -40,7 +48,7 @@ export class EventsController {
     context.response.setHeader("Cache-Control", "private, no-store");
     yield {
       event: "state",
-      data: composeState(this.queue, this.settings, deviceId),
+      data: composeState(this.queue, this.settings, deviceId, this.background),
     };
     while (!signal?.aborted) {
       const result = await this.broker.waitChange(signal);
@@ -50,7 +58,12 @@ export class EventsController {
       } else {
         yield {
           event: "state",
-          data: composeState(this.queue, this.settings, deviceId),
+          data: composeState(
+            this.queue,
+            this.settings,
+            deviceId,
+            this.background,
+          ),
         };
       }
     }

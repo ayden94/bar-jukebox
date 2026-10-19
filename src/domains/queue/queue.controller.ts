@@ -12,6 +12,7 @@ import {
 } from "@fluojs/http";
 import { deviceIdOf } from "../../middleware/device-cookie.middleware";
 import type { TrackRef } from "../../music/contracts";
+import { BackgroundPlayer } from "../background/background-player";
 import { SearchService, SongLookupError } from "../search/search.service";
 import { SettingsService } from "../settings/settings.service";
 import { makeSong } from "../shared/song";
@@ -22,7 +23,13 @@ import { QueueService } from "./queue.service";
 
 class StateDto {}
 
-@Inject(QueueService, TableService, SettingsService, SearchService)
+@Inject(
+  QueueService,
+  TableService,
+  SettingsService,
+  SearchService,
+  BackgroundPlayer,
+)
 @Controller()
 export class QueueController {
   constructor(
@@ -30,13 +37,19 @@ export class QueueController {
     private readonly tableService: TableService,
     private readonly settings: SettingsService,
     private readonly search: SearchService,
+    private readonly background: BackgroundPlayer,
   ) {}
 
   @Get("/api/state")
   @RequestDto(StateDto)
   state(_dto: StateDto, context: RequestContext) {
     context.response.setHeader("Cache-Control", "private, no-store");
-    return composeState(this.queue, this.settings, deviceIdOf(context));
+    return composeState(
+      this.queue,
+      this.settings,
+      deviceIdOf(context),
+      this.background,
+    );
   }
 
   @Post("/api/request")

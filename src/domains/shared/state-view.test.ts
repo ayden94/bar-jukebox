@@ -45,4 +45,26 @@ test("공개 상태는 인증 식별자 없이 본인 곡만 구분해요", () =
   expect(others.queue[0]?.isMine).toBe(false);
   expect(JSON.stringify(mine)).not.toContain("deviceId");
   expect(JSON.stringify(mine)).not.toContain("private-device");
+  expect(mine.background).toBeNull();
+});
+
+test("공개 상태는 신청곡이 없을 때만 배경 곡 이름과 아티스트를 보여줘요", () => {
+  const empty = {
+    snapshot: () => ({ queue: [], history: [], nowPlaying: null }),
+  };
+  const settings = {
+    read: () => ({
+      notice: "",
+      requestsPaused: false,
+      maxPerDevice: 1,
+      maxPerTable: 5,
+    }),
+  };
+  const background = { now: () => ({ title: "Blue", artist: "Miles" }) };
+
+  expect(composeState(empty, settings, "", background).background).toEqual({
+    title: "Blue",
+    artist: "Miles",
+  });
+  expect(composeState(empty, settings, "").background).toBeNull();
 });

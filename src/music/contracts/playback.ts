@@ -85,7 +85,8 @@ export type PlaybackObservation = {
   | {
       readonly state: "ended";
       // 시간 경과, 위치 0, 정지, ID 변경만으로 ended를 합성하지 않아요.
-      readonly endReason: "natural-end" | "owned-advance";
+      // replaced는 다른 곡이 실제로 재생 중으로 관측된 경우예요. 그 곡을 정지하지 않아요.
+      readonly endReason: "natural-end" | "owned-advance" | "replaced";
     }
   | {
       readonly state: Exclude<PlaybackState, "ended">;

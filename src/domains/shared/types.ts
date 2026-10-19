@@ -35,4 +35,6 @@ export type JukeboxState = {
   notice: string;
   maxPerDevice: number;
   maxPerTable: number;
+  // 신청곡이 없을 때 흐르는 배경 음악이에요. 곡 이름과 아티스트만 공개해요.
+  background: { title: string; artist: string | null } | null;
 };

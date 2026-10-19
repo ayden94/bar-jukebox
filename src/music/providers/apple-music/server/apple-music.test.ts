@@ -7,7 +7,7 @@ import type {
 } from "../../../contracts/index";
 import { appleMusicDescriptor } from "../index";
 import { createAppleMusicServer } from "./index";
-import type { NativeSnapshot } from "./native";
+import { type NativeSnapshot, sameText } from "./native";
 
 const signal = new AbortController().signal;
 const ref: TrackRef = { providerId: "apple-music", trackId: "123" };
@@ -390,7 +390,7 @@ test("명령 접수: 실제 다음 관측 전에는 playing을 만들지 않아�
   });
 });
 
-test("관측: 무관한 추천곡으로 바뀌면 종료하거나 외부 음악을 정지하지 않아요", async () => {
+test("관측: 무관한 추천곡이 재생되면 신청을 끝내되 흐르는 음악은 정지하지 않아요", async () => {
   const instance = await fixture();
   await instance.connect();
   await instance.play();
@@ -408,8 +408,9 @@ test("관측: 무관한 추천곡으로 바뀌면 종료하거나 외부 음악�
 
   const observed = await instance.tick(iterator);
 
-  expect(observed.state).toBe("unknown");
-  expect(observed.trackRef).toBeNull();
+  expect(observed.state).toBe("ended");
+  expect(observed.endReason).toBe("replaced");
+  expect(observed.trackRef).toEqual(ref);
   expect(observed.correlation).toEqual({
     commandId: instance.context.commandId,
     attemptId: instance.context.attemptId,
@@ -422,7 +423,7 @@ test("관측: 무관한 추천곡으로 바뀌면 종료하거나 외부 음악�
   ).toEqual([]);
 });
 
-test("관측: 같은 앨범의 다음 번호라도 종료 위치 증거가 없으면 정지하지 않아요", async () => {
+test("관측: 같은 앨범의 다음 번호로 직접 넘기면 다른 곡으로 보고 정지하지 않아요", async () => {
   const instance = await fixture();
   await instance.connect();
   await instance.play();
@@ -435,7 +436,10 @@ test("관측: 같은 앨범의 다음 번호라도 종료 위치 증거가 없�
     positionSec: 0,
   });
 
-  expect((await instance.tick(iterator)).state).toBe("unknown");
+  expect(await instance.tick(iterator)).toMatchObject({
+    state: "ended",
+    endReason: "replaced",
+  });
 
   expect(
     instance.scripts.filter((script) =>
@@ -948,4 +952,175 @@ test("dispose: 반복 정리 뒤 모든 외부 접근은 거절해요", async ()
     error: { code: "disconnected" },
   });
   expect(instance.scripts.length).toBe(before);
+});
+
+test("관측: 다른 곡으로 바뀐 뒤 정지 명령은 그 곡을 멈추지 않고 완료만 확인해요", async () => {
+  const instance = await fixture();
+  await instance.connect();
+  await instance.play();
+  const iterator = instance.runtime.playback.observe(signal);
+  await iterator.next();
+  instance.setNative({
+    id: "staff",
+    persistentId: "STAFF",
+    title: "직원이 튼 곡",
+    album: "다른 앨범",
+    positionSec: 10,
+  });
+  expect((await instance.tick(iterator)).endReason).toBe("replaced");
+
+  const context = { ...instance.context, commandId: "finish-stop" };
+  expect(
+    (await instance.runtime.playback.execute({ type: "stop", context }, signal))
+      .status,
+  ).toBe("accepted");
+  expect(await instance.tick(iterator)).toMatchObject({
+    state: "stopped",
+    correlation: { commandId: "finish-stop" },
+  });
+  expect(
+    instance.scripts.filter((script) =>
+      script.startsWith("-- jukebox:control"),
+    ),
+  ).toEqual([]);
+  expect(
+    (
+      await instance.runtime.playback.execute(
+        { type: "pause", context: { ...context, commandId: "late-pause" } },
+        signal,
+      )
+    ).status,
+  ).toBe("rejected");
+});
+
+test("관측: 다른 곡이 멈춰 있으면 끝났다고 단정하지 않아요", async () => {
+  const instance = await fixture();
+  await instance.connect();
+  await instance.play();
+  const iterator = instance.runtime.playback.observe(signal);
+  await iterator.next();
+  instance.setNative({
+    id: "other",
+    persistentId: "OTHER",
+    title: "다른 곡",
+    state: "paused",
+  });
+
+  expect((await instance.tick(iterator)).state).toBe("unknown");
+});
+
+test("재생 준비: 카탈로그와 Music.app 표기 차이는 같은 곡으로 확인해요", async () => {
+  expect(sameText("Beyoncé", "BEYONCE")).toBe(true);
+  expect(sameText("Don't Know Why", "Don’t Know Why")).toBe(true);
+  expect(sameText("아이유 (IU)", "아이유(IU)")).toBe(true);
+  expect(sameText("노래", "다른 노래")).toBe(false);
+  const instance = await fixture({}, [
+    { ...rawTrack, trackName: "노래 ", artistName: "가수" },
+  ]);
+  await instance.connect();
+  expect((await instance.play()).status).toBe("accepted");
+  const script = instance.scripts.find((item) =>
+    item.startsWith("-- jukebox:prepare"),
+  )!;
+  expect(script).toContain("ignoring case, diacriticals");
+});
+
+test("재생 준비: 중간에 실패하면 음소거 상태를 되돌려요", async () => {
+  const scripts: string[] = [];
+  const instance = await fixture({
+    runScript: async (script) => {
+      scripts.push(script);
+      if (script.startsWith("-- jukebox:connect")) return "stopped";
+      if (script.startsWith("-- jukebox:volume")) return "70";
+      if (script.startsWith("-- jukebox:prepare")) throw new Error("killed");
+      return "";
+    },
+  });
+  await instance.connect();
+
+  expect((await instance.play()).status).toBe("unknown");
+  const restore = scripts.find((item) =>
+    item.startsWith("-- jukebox:restore-volume"),
+  );
+  expect(restore).toContain("if sound volume is 0 then set sound volume to 70");
+});
+
+test("배경: 재생 목록을 셔플·반복으로 켜고 신청곡 재생 중에는 덮지 않아요", async () => {
+  const instance = await fixture();
+  await instance.connect();
+  const background = instance.runtime.background!;
+  await instance.play();
+
+  expect(await background.start("재즈", signal)).toEqual({
+    ok: false,
+    error: { code: "configuration" },
+  });
+  expect(
+    instance.scripts.some((script) =>
+      script.startsWith("-- jukebox:background-start"),
+    ),
+  ).toBe(false);
+});
+
+test("배경: 재생 목록 시작 결과와 현재 곡을 확인해요", async () => {
+  const scripts: string[] = [];
+  const instance = await fixture({
+    runScript: async (script) => {
+      scripts.push(script);
+      if (script.startsWith("-- jukebox:connect")) return "stopped";
+      if (script.startsWith("-- jukebox:playlists"))
+        return ["재즈", "라운지", "재즈"].join("\x1f");
+      if (script.startsWith("-- jukebox:background-start")) return "재즈";
+      if (script.startsWith("-- jukebox:background"))
+        return ["playing", "PID", "Blue", "Miles", "재즈", "12", "300"].join(
+          "\x1f",
+        );
+      return "";
+    },
+  });
+  await instance.connect();
+  const background = instance.runtime.background!;
+
+  expect(await background.listPlaylists(signal)).toEqual({
+    ok: true,
+    value: ["재즈", "라운지"],
+  });
+  expect(await background.start("재즈", signal)).toEqual({
+    ok: true,
+    value: undefined,
+  });
+  const start = scripts.find((script) =>
+    script.startsWith("-- jukebox:background-start"),
+  )!;
+  expect(start).toContain('user playlist "재즈"');
+  expect(start).toContain("set shuffle enabled to true");
+  expect(start).toContain("set song repeat to all");
+  expect(await background.observe(signal)).toEqual({
+    ok: true,
+    value: {
+      state: "playing",
+      trackKey: "PID",
+      title: "Blue",
+      artist: "Miles",
+      playlist: "재즈",
+      positionSec: 12,
+      durationSec: 300,
+    },
+  });
+});
+
+test("카탈로그: 국가 코드를 지정하면 검색과 조회를 같은 storefront로 해요", async () => {
+  const instance = await fixture({ country: "KR" });
+  await instance.provider.catalog.search("노래", null, signal);
+  await instance.provider.catalog.lookup(ref, signal);
+
+  expect(instance.urls).toHaveLength(2);
+  for (const url of instance.urls) expect(url).toEndWith("&country=kr");
+});
+
+test("카탈로그: 잘못된 국가 코드는 요청에 넣지 않아요", async () => {
+  const instance = await fixture({ country: "kr&x=1" });
+  await instance.provider.catalog.search("노래", null, signal);
+
+  expect(instance.urls[0]).not.toContain("country");
 });
