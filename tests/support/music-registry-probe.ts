@@ -92,7 +92,7 @@ try {
   );
   assert.deepEqual(missingTransport, {
     ok: false,
-    error: { code: "configuration" },
+    error: { code: "unsupported" },
   });
   assert.deepEqual(calls, []);
   for (const descriptor of musicDescriptors) {
@@ -112,11 +112,16 @@ try {
         },
         new AbortController().signal,
       );
-      assert.equal(result.ok, true);
-      assert.deepEqual(calls.slice(before), [
-        `${selected.providerId}/${selected.modeId}`,
-      ]);
-      if (result.ok) assert.deepEqual(result.value.identity, selected);
+      if (mode.modeId === "applescript") {
+        assert.equal(result.ok, true);
+        assert.deepEqual(calls.slice(before), [
+          `${selected.providerId}/${selected.modeId}`,
+        ]);
+        if (result.ok) assert.deepEqual(result.value.identity, selected);
+      } else {
+        assert.deepEqual(result, { ok: false, error: { code: "unsupported" } });
+        assert.deepEqual(calls.slice(before), []);
+      }
       rows.push({
         selected,
         factoryCalls: calls.slice(before),
@@ -145,7 +150,7 @@ try {
       rows,
       missingTransport: {
         selected: youtubeFixture.provider.identity,
-        result: "configuration",
+        result: "unsupported",
         factoryCalls: [],
       },
       assertions: {

@@ -5,6 +5,7 @@ import type {
   CatalogPort,
   MusicResult,
 } from "../../music/contracts";
+import { createAppleMusicBrowser } from "../../music/providers/apple-music/browser";
 import { createContrastingProvider } from "../../music/testing";
 import { BrowserMusicLifecycle } from "./browser-music-lifecycle";
 import {
@@ -271,18 +272,11 @@ test("브라우저 호스트: 연결 해제 뒤 다른 부팅 identity로 바꾸
   expect(f.host.getSnapshot().phase).toBe("unavailable");
 });
 
-test("브라우저 registry: MusicKit 선택은 factory만 반환하고 미구현 선택은 실패해요", async () => {
-  const selected = await loadBrowserMusicFactory(
-    { providerId: "apple-music", modeId: "musickit" },
-    new AbortController().signal,
-  );
-  expect(selected.ok).toBe(true);
-  if (!selected.ok) throw new Error("MusicKit factory가 필요해요.");
+test("내부 MusicKit factory: 토큰 조회 실패는 준비 성공으로 바꾸지 않아요", async () => {
   expect(
-    await selected.value(
+    await createAppleMusicBrowser(
       {
         api: async () => Response.json({}, { status: 503 }),
-        registerCatalog: () => () => {},
       },
       new AbortController().signal,
     ),
@@ -290,14 +284,17 @@ test("브라우저 registry: MusicKit 선택은 factory만 반환하고 미구�
     ok: false,
     error: { code: "configuration" },
   });
+});
+
+test("브라우저 registry: 로컬 미리보기는 브라우저 factory를 직접 활성화하지 않아요", async () => {
   for (const selected of [
+    { providerId: "apple-music", modeId: "musickit" },
     { providerId: "youtube-music", modeId: "browser-companion" },
     { providerId: "apple-music", modeId: "applescript" },
   ]) {
     expect(
-      (await loadBrowserMusicFactory(selected, new AbortController().signal))
-        .ok,
-    ).toBe(false);
+      await loadBrowserMusicFactory(selected, new AbortController().signal),
+    ).toEqual({ ok: false, error: { code: "unsupported" } });
   }
 });
 

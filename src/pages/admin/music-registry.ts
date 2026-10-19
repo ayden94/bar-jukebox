@@ -1,3 +1,4 @@
+import { musicModeUnavailableReason } from "../../music/availability";
 import type {
   BrowserProviderFactory,
   CatalogPort,
@@ -21,6 +22,8 @@ export async function loadBrowserMusicFactory(
   signal: AbortSignal,
 ): Promise<MusicResult<SelectedBrowserFactory>> {
   signal.throwIfAborted();
+  if (musicModeUnavailableReason(selected, "browser"))
+    return { ok: false, error: { code: "unsupported" } };
   if (selected.providerId === "apple-music" && selected.modeId === "musickit") {
     return { ok: true, value: createAppleMusicBrowser };
   }

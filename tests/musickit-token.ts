@@ -14,7 +14,7 @@ const developerToken = [
     JSON.stringify({
       iss: "qa-not-a-real-issuer",
       iat: 1,
-      exp: Math.floor(Date.now() / 1000) + 3600,
+      exp: 4102444800,
     }),
   ).toString("base64url"),
   Buffer.alloc(64, 1).toString("base64url"),
@@ -63,16 +63,9 @@ async function runCase(
       ...init,
     });
     const text = await response.text();
-    if (
-      path !== "/api/admin/music/developer-token" ||
-      !authenticated ||
-      wrongMode ||
-      kind !== "supplied"
-    ) {
-      for (const secret of [developerToken, expiredToken, token]) {
-        if (secret)
-          assert(!text.includes(secret), "비밀이 공개 응답에 노출됐어요");
-      }
+    for (const secret of [developerToken, expiredToken, token]) {
+      if (secret)
+        assert(!text.includes(secret), "비밀이 공개 응답에 노출됐어요");
     }
     responses.push({
       path,
@@ -108,26 +101,10 @@ async function runCase(
     assert.equal(wrongAdmin.response.status, 401);
     const authorized = await request("/api/admin/music/developer-token", true);
     assert.equal(authorized.response.headers.get("cache-control"), "no-store");
-    assert.equal(
-      authorized.response.status,
-      wrongMode ? 404 : kind === "supplied" ? 200 : 503,
-    );
+    assert.equal(authorized.response.status, 404);
     const body = JSON.parse(authorized.text);
-    if (!wrongMode && kind === "supplied") {
-      assert(
-        body.developerToken === developerToken,
-        "요청한 토큰과 응답이 달라요",
-      );
-    } else {
-      assert.equal(
-        body.error.code,
-        wrongMode ? "unsupported" : "configuration",
-      );
-      assert.equal(
-        body.readiness,
-        wrongMode ? "unavailable" : "setup-required",
-      );
-    }
+    assert.equal(body.error.code, "unsupported");
+    assert.equal(body.readiness, "unavailable");
     const state = JSON.parse((await request("/api/admin/music", true)).text);
     assert.deepEqual(state.active, {
       providerId: "apple-music",
@@ -141,11 +118,9 @@ async function runCase(
       modeId: "environment",
     });
     if (!wrongMode) {
-      assert.equal(state.readiness, "auth-required");
-      assert.equal(state.auth.authorization, "none");
-      assert.equal(state.auth.status, "reauth-required");
-      assert.equal(state.auth.action.kind, "user-gesture");
-      assert.equal(state.reason, state.auth.action.label);
+      assert.equal(state.readiness, "setup-required");
+      assert.equal(state.auth, null);
+      assert(Object.values(state.actions).every((allowed) => !allowed));
       assert.equal(
         (
           await request("/api/admin/music/auth/connect", false, {
@@ -186,18 +161,18 @@ async function runCase(
         409,
       );
       const saved = await configure(state.active);
-      assert.equal(saved.response.status, 201);
-      const after = JSON.parse(saved.text);
+      assert.equal(saved.response.status, 400);
+      const after = JSON.parse((await request("/api/admin/music", true)).text);
       assert.deepEqual(after.active, state.active);
       assert.deepEqual(after.nextBoot.config, state.active);
       assert.equal(after.restartRequired, false);
       assert.equal(after.owner, null);
-      assert.equal(after.auth.authorization, "none");
-      assert.equal(after.readiness, "auth-required");
+      assert.equal(after.auth, null);
+      assert.equal(after.readiness, "setup-required");
       assert.equal(
         (await request("/api/admin/music/developer-token", true)).response
           .status,
-        kind === "supplied" ? 200 : 503,
+        404,
       );
     }
     for (const path of ["/", "/admin/music", "/admin/qr", "/api/state"]) {

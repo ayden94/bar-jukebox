@@ -118,7 +118,7 @@ async function bootMatrix() {
     { providerId: "apple-music", modeId: "musickit" },
     { providerId: "youtube-music", modeId: "browser-companion" },
   ]) {
-    // AppleScript의 외부 앱은 차단하고, 브라우저 방식은 owner 없는 인증 대기를 확인해요.
+    // AppleScript의 외부 앱은 차단하고, 미지원 방식은 설정 보존과 실행 차단을 확인해요.
     const disabled = selected.modeId === "applescript";
     await withServer(selected, disabled, async (server) => {
       const response = await fetch(`${server.url}/api/admin/music`, {
@@ -136,12 +136,17 @@ async function bootMatrix() {
           ? process.platform === "darwin"
             ? "disabled"
             : "setup-required"
-          : "auth-required",
+          : "setup-required",
       );
       if (!disabled) {
-        assert.equal(state.auth.authorization, "none");
-        assert.equal(state.auth.status, "reauth-required");
-        assert.equal(state.auth.action.kind, "user-gesture");
+        assert.equal(state.auth, null);
+        assert(Object.values(state.actions).every((allowed) => !allowed));
+        const rejected = await fetch(`${server.url}/api/admin/music/config`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(selected),
+        });
+        assert.equal(rejected.status, 400);
       }
       assert.equal(state.providers.length, 2);
       assert.equal(
@@ -151,6 +156,11 @@ async function bootMatrix() {
       );
       const page = await fetch(`${server.url}/admin/music`);
       assert.equal(page.status, 200);
+      assert(
+        !page.headers
+          .get("content-security-policy")
+          ?.includes("js-cdn.music.apple.com"),
+      );
       assert((await page.text()).includes("admin-music"));
       const publicState = await (await fetch(`${server.url}/api/state`)).json();
       assert.deepEqual(publicState.queue, []);

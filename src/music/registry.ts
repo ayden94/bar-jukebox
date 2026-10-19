@@ -1,3 +1,4 @@
+import { musicModeUnavailableReason } from "./availability";
 import type {
   ArtworkPort,
   BrowserMusicProvider,
@@ -40,6 +41,13 @@ export async function loadMusicServer(
   MusicResult<ServerMusicProvider & { readonly artwork: ArtworkPort }>
 > {
   signal.throwIfAborted();
+  const registered = musicDescriptors.some(
+    (descriptor) =>
+      descriptor.providerId === selected.providerId &&
+      descriptor.modes.some((mode) => mode.modeId === selected.modeId),
+  );
+  if (registered && musicModeUnavailableReason(selected, options.platform))
+    return { ok: false, error: { code: "unsupported" } };
   if (selected.providerId === "apple-music") {
     switch (selected.modeId) {
       case "applescript": {

@@ -2,12 +2,16 @@ import { expect, test } from "bun:test";
 import type { ReactNavigationPayload } from "@fluojs/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MusicService } from "../../domains/music/music.service";
-import { resolveMusicBootConfig } from "../../domains/music/music-config";
+import {
+  registerMusicDescriptors,
+  resolveMusicBootConfig,
+} from "../../domains/music/music-config";
 import {
   firstConfig,
   readyState,
   registry,
 } from "../../domains/music/test-support";
+import { musicDescriptors } from "../../music/registry";
 import { AppDocument } from "../app-document";
 import { AdminMusicPage } from "./index";
 import MusicPage from "./music-page";
@@ -201,6 +205,43 @@ test("음악 설정 폼: 환경 변수로 잠긴 필드는 비활성화하고 �
   expect(controls).toEqual([
     { name: "providerId", disabled: true, help: "music-provider-help" },
     { name: "modeId", disabled: false, help: "music-mode-help" },
+  ]);
+});
+
+test("음악 설정 폼: 미지원 서비스와 방식은 목록에 남지만 native option을 비활성화해요", async () => {
+  const model: MusicSnapshot = {
+    ...(await snapshot()),
+    providers: registerMusicDescriptors(musicDescriptors, "darwin"),
+  };
+  const options: { value: string | null; disabled: boolean }[] = [];
+  const html = renderToStaticMarkup(
+    <MusicSettingsPanel
+      snapshot={model}
+      selected={{ providerId: "apple-music", modeId: "applescript" }}
+      pending={false}
+      dirty={false}
+      onChange={() => {}}
+      onSave={async () => {}}
+    />,
+  );
+
+  await new HTMLRewriter()
+    .on("option", {
+      element(element) {
+        options.push({
+          value: element.getAttribute("value"),
+          disabled: element.hasAttribute("disabled"),
+        });
+      },
+    })
+    .transform(new Response(html))
+    .text();
+
+  expect(options).toEqual([
+    { value: "apple-music", disabled: false },
+    { value: "youtube-music", disabled: true },
+    { value: "applescript", disabled: false },
+    { value: "musickit", disabled: true },
   ]);
 });
 

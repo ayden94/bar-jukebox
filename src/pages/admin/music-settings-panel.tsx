@@ -120,10 +120,14 @@ export function MusicSettingsPanel({
             )}
             {snapshot.providers.map((provider) => (
               <option
+                disabled={!provider.modes.some((mode) => mode.available)}
                 key={provider.descriptor.providerId}
                 value={provider.descriptor.providerId}
               >
                 {provider.descriptor.displayName}
+                {!provider.modes.some((mode) => mode.available)
+                  ? ` · ${provider.modes[0]?.unavailableReason ?? "사용 불가"}`
+                  : ""}
               </option>
             ))}
           </select>
@@ -160,7 +164,9 @@ export function MusicSettingsPanel({
                 value={mode.modeId}
               >
                 {mode.displayName}
-                {!mode.available ? " (사용 불가)" : ""}
+                {!mode.available
+                  ? ` · ${mode.unavailableReason ?? "사용 불가"}`
+                  : ""}
               </option>
             ))}
           </select>
@@ -169,14 +175,19 @@ export function MusicSettingsPanel({
               ? "MUSIC_PLAYBACK_MODE 환경 변수로 고정돼 있어요. 서버 환경 변수를 수정해주세요."
               : "이 서버 환경에서 지원하는 재생 방식만 저장할 수 있어요."}
           </p>
-          {modes
-            .filter((mode) => !mode.available)
-            .map((mode) => (
-              <p className={admin.note} key={mode.modeId}>
-                {mode.displayName}:{" "}
-                {mode.unavailableReason ?? "이 환경에서 사용할 수 없어요."}
-              </p>
-            ))}
+          {snapshot.providers.flatMap((provider) =>
+            provider.modes
+              .filter((mode) => !mode.available)
+              .map((mode) => (
+                <p
+                  className={admin.note}
+                  key={`${provider.descriptor.providerId}/${mode.modeId}`}
+                >
+                  {provider.descriptor.displayName} · {mode.displayName}:{" "}
+                  {mode.unavailableReason ?? "이 환경에서 사용할 수 없어요."}
+                </p>
+              )),
+          )}
         </div>
         <button
           className={admin.button}

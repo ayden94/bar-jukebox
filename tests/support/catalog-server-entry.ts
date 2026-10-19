@@ -1,5 +1,7 @@
 import { pathToFileURL } from "node:url";
 import type { JukeboxRuntime } from "../../src/domains/providers";
+import { youtubeMusicDescriptor } from "../../src/music/providers/youtube-music";
+import { createYouTubeMusicServer } from "../../src/music/providers/youtube-music/server";
 
 const entry = process.argv[2];
 if (!entry) throw new Error("빌드한 서버 진입점이 필요해요");
@@ -35,11 +37,25 @@ globalThis.fetch = Object.assign(
   nativeFetch,
 );
 const { startJukebox } = await import(pathToFileURL(entry).href);
-const {
-  app,
-  runtime,
-}: { app: { close(): Promise<void> }; runtime: JukeboxRuntime } =
-  await startJukebox();
+// 제품의 선택 가능 목록과 별개로 내부 카탈로그 계약을 검증하는 QA 전용 주입이에요.
+let runtime: JukeboxRuntime;
+const provider = await createYouTubeMusicServer(
+  {
+    transport: {
+      search: (...args) => runtime.catalogBridge.search(...args),
+      lookup: (...args) => runtime.catalogBridge.lookup(...args),
+    },
+  },
+  new AbortController().signal,
+);
+if (!provider.ok) throw new Error(provider.error.code);
+const running: { app: { close(): Promise<void> }; runtime: JukeboxRuntime } =
+  await startJukebox({
+    playbackDisabled: false,
+    music: { descriptor: youtubeMusicDescriptor, provider: provider.value },
+  });
+const app = running.app;
+runtime = running.runtime;
 process.send = nativeSend;
 const operations = new Map<string, AbortController>();
 const results = new Map<string, unknown>();

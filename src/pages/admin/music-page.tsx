@@ -1,21 +1,48 @@
 import { useRef, useState } from "react";
 import { BrowserMusicControls } from "./browser-music-controls";
 import { useBrowserMusicHost } from "./browser-music-host";
+import { BrowserRecoveryControls } from "./browser-recovery-controls";
 import { MusicConnectionPanel } from "./music-panel";
 import { configLabel, MusicSettingsPanel } from "./music-settings-panel";
 import type { MusicConfigView } from "./music-types";
 import { admin } from "./styles";
 import { UnsavedChanges } from "./unsaved-changes";
 
+function RetainedBrowserRecovery() {
+  const host = useBrowserMusicHost();
+  const snapshot = host.playback;
+  if (
+    !host.music.fresh ||
+    host.playbackError ||
+    snapshot?.owner?.connection.location !== "browser" ||
+    snapshot.owner.released ||
+    snapshot.ownerConnected
+  )
+    return null;
+  return (
+    <section className={admin.panel} aria-label="이전 브라우저 재생 권한 복구">
+      <BrowserRecoveryControls
+        snapshot={snapshot}
+        pending={host.pending || host.music.pending}
+        onConfirm={(current) => void host.confirmStopped(current)}
+      />
+    </section>
+  );
+}
+
 export default function AdminMusicPage() {
   const host = useBrowserMusicHost();
   const installation = useRef<HTMLDetailsElement>(null);
   const music = host.music;
   const active = music.snapshot?.active;
+  const registration = music.snapshot?.providers.find(
+    (provider) => provider.descriptor.providerId === active?.providerId,
+  );
   const browserMode =
-    music.snapshot?.providers
-      .find((provider) => provider.descriptor.providerId === active?.providerId)
-      ?.descriptor.modes.find((mode) => mode.modeId === active?.modeId)
+    registration?.modes.some(
+      (mode) => mode.modeId === active?.modeId && mode.available,
+    ) &&
+    registration.descriptor.modes.find((mode) => mode.modeId === active?.modeId)
       ?.location === "browser";
   const [draft, setDraft] = useState<MusicConfigView | null>(null);
   const saved = music.snapshot?.nextBoot.config;
@@ -64,13 +91,16 @@ export default function AdminMusicPage() {
           )}
           {!browserMode &&
             (music.fresh ? (
-              <MusicConnectionPanel
-                snapshot={music.snapshot}
-                targets={music.targets}
-                pending={music.pending}
-                onAction={music.act}
-                onLoadTargets={music.loadTargets}
-              />
+              <>
+                <MusicConnectionPanel
+                  snapshot={music.snapshot}
+                  targets={music.targets}
+                  pending={music.pending}
+                  onAction={music.act}
+                  onLoadTargets={music.loadTargets}
+                />
+                <RetainedBrowserRecovery />
+              </>
             ) : (
               <p className={admin.note}>
                 현재 연결 상태를 다시 확인해주세요. 이전 상태는 준비 완료로 볼

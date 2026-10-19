@@ -25,8 +25,11 @@ test("음악 등록: 세 조합은 인증이나 외부 앱 없이 조회해요",
   ]);
 });
 
-test.each([{ providerId: "youtube-music", modeId: "browser-companion" }])(
-  "선택 loader: $providerId/$modeId는 주입된 transport 없이 준비 성공을 만들지 않아요",
+test.each([
+  { providerId: "youtube-music", modeId: "browser-companion" },
+  { providerId: "apple-music", modeId: "musickit" },
+])(
+  "선택 loader: $providerId/$modeId는 직접 호출해도 활성화하지 않아요",
   async (selected) => {
     const result = await loadMusicServer(
       selected,
@@ -34,15 +37,18 @@ test.each([{ providerId: "youtube-music", modeId: "browser-companion" }])(
       new AbortController().signal,
     );
 
-    expect(result).toEqual({ ok: false, error: { code: "configuration" } });
+    expect(result).toEqual({ ok: false, error: { code: "unsupported" } });
   },
 );
 
-test("선택 loader: 토큰 없는 MusicKit도 선택 identity와 인증 대기를 유지해요", async () => {
+test("내부 MusicKit 어댑터: 미지원 제품 선택과 별개로 인증 대기 계약을 유지해요", async () => {
+  const { createAppleMusicKitServer } = await import(
+    "./providers/apple-music/server"
+  );
   const selected = { providerId: "apple-music", modeId: "musickit" };
   const signal = new AbortController().signal;
 
-  const result = await loadMusicServer(selected, options, signal);
+  const result = await createAppleMusicKitServer({}, signal);
 
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.error.code);

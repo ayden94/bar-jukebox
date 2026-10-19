@@ -71,9 +71,11 @@ export async function startJukebox(
   });
   const themeHash = createHash("sha256").update(themeScript).digest("base64");
   // nextBoot 저장은 현재 문서의 권한을 바꾸지 않아요.
-  const { active } = await runtime.musicService.getSnapshot();
+  const { active, readiness } = await runtime.musicService.getSnapshot();
   const musickit =
-    active?.providerId === "apple-music" && active.modeId === "musickit";
+    readiness !== "setup-required" &&
+    active?.providerId === "apple-music" &&
+    active.modeId === "musickit";
   const musicScript = musickit ? " https://js-cdn.music.apple.com" : "";
   // SDK에서 확인한 API와 MediaSource만 허용해요. 실재생 CDN/DRM은 별도 검증해요.
   const musicResources = musickit
